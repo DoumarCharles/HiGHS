@@ -366,11 +366,11 @@ void testCallbackUserSolution() {
   }
   a_start[num_col] = num_nz;
   for (HighsInt iRow = 0; iRow < num_row; iRow++) {
-    double sum = 0;
+    HighsInt sum = 0;
     for (HighsInt iCol = 0; iCol < num_col; iCol++)
-      sum += a_value[iCol * num_row + iRow];
+      sum += (HighsInt)a_value[iCol * num_row + iRow];
     row_lower[iRow] = -Highs_getInfinity(NULL);
-    row_upper[iRow] = floor(sum / 2);
+    row_upper[iRow] = (double)(sum / 2);
   }
   // Greedy feasible solution: take columns in order while they fit
   double row_activity[4] = {0, 0, 0, 0};
