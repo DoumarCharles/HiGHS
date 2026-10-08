@@ -1614,7 +1614,12 @@ HighsInt Highs_setCallbackSolution(HighsCallbackDataIn* data_in,
                                    HighsInt num_entries, const double* value) {
   if (data_in != nullptr && data_in->cbdata != nullptr) {
     HighsCallbackInput* obj = static_cast<HighsCallbackInput*>(data_in->cbdata);
-    return static_cast<int>(obj->setSolution(num_entries, value));
+    const HighsStatus status = obj->setSolution(num_entries, value);
+    // Mirror the result into the C struct: the C-callback wrapper in
+    // Highs::setCallback copies data_in back over the HighsCallbackInput
+    // when the callback returns, and would otherwise reset the flag.
+    data_in->user_has_solution = obj->user_has_solution ? 1 : 0;
+    return static_cast<int>(status);
   } else
     return static_cast<int>(HighsStatus::kError);
 }
@@ -1625,7 +1630,9 @@ HighsInt Highs_setCallbackSparseSolution(HighsCallbackDataIn* data_in,
                                          const double* value) {
   if (data_in != nullptr && data_in->cbdata != nullptr) {
     HighsCallbackInput* obj = static_cast<HighsCallbackInput*>(data_in->cbdata);
-    return static_cast<int>(obj->setSolution(num_entries, index, value));
+    const HighsStatus status = obj->setSolution(num_entries, index, value);
+    data_in->user_has_solution = obj->user_has_solution ? 1 : 0;
+    return static_cast<int>(status);
   } else
     return static_cast<int>(HighsStatus::kError);
 }
@@ -1633,7 +1640,9 @@ HighsInt Highs_setCallbackSparseSolution(HighsCallbackDataIn* data_in,
 HighsInt Highs_repairCallbackSolution(HighsCallbackDataIn* data_in) {
   if (data_in != nullptr && data_in->cbdata != nullptr) {
     HighsCallbackInput* obj = static_cast<HighsCallbackInput*>(data_in->cbdata);
-    return static_cast<int>(obj->repairSolution());
+    const HighsStatus status = obj->repairSolution();
+    data_in->user_has_solution = obj->user_has_solution ? 1 : 0;
+    return static_cast<int>(status);
   } else
     return static_cast<int>(HighsStatus::kError);
 }
