@@ -312,48 +312,60 @@ void createBlendingLp(void* highs) {
 
 // Test methods
 // Data shared with userSolutionCallback
-static double user_solution_values[40];
+static double user_solution_values[30];
 static HighsInt user_solution_num_col = 0;
-static HighsInt user_solution_num_firings = 0;
-static double user_solution_primal_bound_at_second_firing = 0;
+static HighsInt user_solution_num_queries = 0;
+static HighsInt user_solution_interrupted = 0;
+static double user_solution_primal_bound_at_interrupt = 0;
 
 static void userSolutionCallback(const int callback_type, const char* message,
                                  const HighsCallbackDataOut* data_out,
                                  HighsCallbackDataIn* data_in,
                                  void* user_callback_data) {
-  if (callback_type != kHighsCallbackCallbackMipUserSolution) return;
-  user_solution_num_firings++;
-  if (user_solution_num_firings == 1) {
-    // Hand HiGHS a known feasible solution at the first opportunity
-    HighsInt return_status = Highs_setCallbackSolution(
-        data_in, user_solution_num_col, user_solution_values);
-    assert(return_status == kHighsStatusOk);
-  } else if (user_solution_num_firings == 2) {
-    user_solution_primal_bound_at_second_firing = data_out->mip_primal_bound;
+  if (callback_type == kHighsCallbackCallbackMipUserSolution) {
+    user_solution_num_queries++;
+    if (user_solution_num_queries == 1) {
+      // Hand HiGHS a known feasible solution at the first query
+      HighsInt return_status = Highs_setCallbackSolution(
+          data_in, user_solution_num_col, user_solution_values);
+      assert(return_status == kHighsStatusOk);
+    }
+  } else if (callback_type == kHighsCallbackMipInterrupt) {
+    // Stop at the first interrupt check after the solution was handed over,
+    // before HiGHS can have found a feasible solution itself
+    if (user_solution_num_queries < 1 || user_solution_interrupted) return;
+    user_solution_interrupted = 1;
+    user_solution_primal_bound_at_interrupt = data_out->mip_primal_bound;
+    data_in->user_interrupt = 1;
   }
 }
 
 void testCallbackUserSolution() {
-  // Multi-dimensional knapsack: maximize c^T x s.t. A x <= b, x binary. Big
-  // enough that HiGHS queries for a user solution more than once, with a
-  // feasible solution whose objective is far better than the trivial
-  // heuristics' solutions
-  const HighsInt num_col = 40;
+  // Market-split-style problem: minimize c^T x s.t. A x = b, x binary, with
+  // b = A x* for a random binary x*. With the primal heuristics off, HiGHS
+  // cannot find a feasible solution on its own before its first interrupt
+  // check, so an incumbent at that point can only be the user solution
+  const HighsInt num_col = 30;
   const HighsInt num_row = 4;
   const HighsInt num_nz = num_col * num_row;
-  double col_cost[40];
-  double col_lower[40];
-  double col_upper[40];
-  double row_lower[4];
+  double col_cost[30];
+  double col_lower[30];
+  double col_upper[30];
+  double row_lower[4] = {0, 0, 0, 0};
   double row_upper[4];
-  HighsInt a_start[41];
-  HighsInt a_index[160];
-  double a_value[160];
-  HighsInt integrality[40];
+  HighsInt a_start[31];
+  HighsInt a_index[120];
+  double a_value[120];
+  HighsInt integrality[30];
+  double user_solution_objective = 0;
   unsigned int state = 12345u;
+  user_solution_num_col = num_col;
   for (HighsInt iCol = 0; iCol < num_col; iCol++) {
     state = state * 1664525u + 1013904223u;
-    col_cost[iCol] = 10 + (state >> 8) % 90;
+    col_cost[iCol] = 1 + (state >> 8) % 100;
+    state = state * 1664525u + 1013904223u;
+    user_solution_values[iCol] = (state >> 16) % 2;
+    user_solution_objective += col_cost[iCol] * user_solution_values[iCol];
     col_lower[iCol] = 0;
     col_upper[iCol] = 1;
     integrality[iCol] = kHighsVarTypeInteger;
@@ -361,53 +373,52 @@ void testCallbackUserSolution() {
     for (HighsInt iRow = 0; iRow < num_row; iRow++) {
       state = state * 1664525u + 1013904223u;
       a_index[iCol * num_row + iRow] = iRow;
-      a_value[iCol * num_row + iRow] = 5 + (state >> 8) % 45;
+      a_value[iCol * num_row + iRow] = (state >> 8) % 100;
+      row_lower[iRow] +=
+          a_value[iCol * num_row + iRow] * user_solution_values[iCol];
     }
   }
   a_start[num_col] = num_nz;
-  for (HighsInt iRow = 0; iRow < num_row; iRow++) {
-    HighsInt sum = 0;
-    for (HighsInt iCol = 0; iCol < num_col; iCol++)
-      sum += (HighsInt)a_value[iCol * num_row + iRow];
-    row_lower[iRow] = -Highs_getInfinity(NULL);
-    row_upper[iRow] = (double)(sum / 2);
-  }
-  // Greedy feasible solution: take columns in order while they fit
-  double row_activity[4] = {0, 0, 0, 0};
-  double user_solution_objective = 0;
-  user_solution_num_col = num_col;
-  for (HighsInt iCol = 0; iCol < num_col; iCol++) {
-    HighsInt fits = 1;
-    for (HighsInt iRow = 0; iRow < num_row; iRow++)
-      if (row_activity[iRow] + a_value[iCol * num_row + iRow] > row_upper[iRow])
-        fits = 0;
-    user_solution_values[iCol] = fits;
-    if (!fits) continue;
-    user_solution_objective += col_cost[iCol];
-    for (HighsInt iRow = 0; iRow < num_row; iRow++)
-      row_activity[iRow] += a_value[iCol * num_row + iRow];
-  }
+  for (HighsInt iRow = 0; iRow < num_row; iRow++)
+    row_upper[iRow] = row_lower[iRow];
 
   void* highs = Highs_create();
   Highs_setBoolOptionValue(highs, "output_flag", dev_run);
   Highs_setStringOptionValue(highs, "presolve", "off");
+  Highs_setBoolOptionValue(highs, "mip_heuristic_run_feasibility_jump", 0);
+  Highs_setDoubleOptionValue(highs, "mip_heuristic_effort", 0);
+  Highs_setDoubleOptionValue(highs, "time_limit", 10);
   Highs_passMip(highs, num_col, num_row, num_nz, kHighsMatrixFormatColwise,
-                kHighsObjSenseMaximize, 0, col_cost, col_lower, col_upper,
+                kHighsObjSenseMinimize, 0, col_cost, col_lower, col_upper,
                 row_lower, row_upper, a_start, a_index, a_value, integrality);
   Highs_setCallback(highs, userSolutionCallback, NULL);
   Highs_startCallback(highs, kHighsCallbackCallbackMipUserSolution);
+  Highs_startCallback(highs, kHighsCallbackMipInterrupt);
   Highs_run(highs);
+  HighsInt model_status = Highs_getModelStatus(highs);
+  HighsInt primal_solution_status = 0;
+  Highs_getIntInfoValue(highs, "primal_solution_status",
+                        &primal_solution_status);
+  double objective_function_value = Highs_getObjectiveValue(highs);
   Highs_destroy(highs);
 
-  // The solution handed over at the first query must be HiGHS's incumbent by
-  // the time of the second query
-  assert(user_solution_num_firings >= 2);
   if (dev_run)
-    printf("User solution objective %g; primal bound at second query %g\n",
-           user_solution_objective,
-           user_solution_primal_bound_at_second_firing);
-  assert(user_solution_primal_bound_at_second_firing >=
-         user_solution_objective - double_equal_tolerance);
+    printf(
+        "User solution objective %g; primal bound at interrupt %g; model "
+        "status %d; primal solution status %d; objective %g\n",
+        user_solution_objective, user_solution_primal_bound_at_interrupt,
+        (int)model_status, (int)primal_solution_status,
+        objective_function_value);
+  // The solution handed over at the first query must be HiGHS's incumbent
+  // (or something better) by the next interrupt check
+  assert(user_solution_num_queries >= 1);
+  assert(user_solution_interrupted);
+  assert(model_status == kHighsModelStatusInterrupt);
+  assert(user_solution_primal_bound_at_interrupt <=
+         user_solution_objective + double_equal_tolerance);
+  assert(primal_solution_status == kHighsSolutionStatusFeasible);
+  assert(objective_function_value <=
+         user_solution_objective + double_equal_tolerance);
 }
 
 void versionApi() {
