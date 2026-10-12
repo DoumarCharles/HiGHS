@@ -2769,10 +2769,24 @@ HighsStatus Highs::setCallback(HighsCCallbackType c_callback,
                                       const HighsCallbackOutput* cb_out,
                                       HighsCallbackInput* cb_in, void* e) {
     HighsCallbackDataOut cc_out = static_cast<HighsCallbackDataOut>(*cb_out);
-    HighsCallbackDataIn cc_in;
+    // Value-initialise so that, when there is no callback input (as for
+    // logging), the C callback sees cbdata == nullptr rather than garbage
+    HighsCallbackDataIn cc_in{};
     if (cb_in) cc_in = static_cast<HighsCallbackDataIn>(*cb_in);
+    const HighsCallbackDataIn cc_in_given = cc_in;
     c_callback(a, b.c_str(), &cc_out, &cc_in, e);
-    if (cb_in) *cb_in = cc_in;  // copy the data in
+    if (cb_in) {
+      // Copy back only the flags that the C callback changed in the struct
+      // itself. C API functions such as Highs_setCallbackSolution act on
+      // *cb_in directly through cc_in.cbdata, so overwriting *cb_in with the
+      // unchanged copy would discard what they set. The solution values need
+      // no copying, since cc_in.user_solution points into
+      // cb_in->user_solution
+      if (cc_in.user_interrupt != cc_in_given.user_interrupt)
+        cb_in->user_interrupt = cc_in.user_interrupt != 0;
+      if (cc_in.user_has_solution != cc_in_given.user_has_solution)
+        cb_in->user_has_solution = cc_in.user_has_solution != 0;
+    }
   };
   this->callback_.user_callback_data = user_callback_data;
 
