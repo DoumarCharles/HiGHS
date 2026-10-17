@@ -2544,3 +2544,81 @@ TEST_CASE("issue-3434", "[highs_test_mip_solver]") {
 
   highs.resetGlobalScheduler(true);
 }
+
+// https://github.com/ERGO-Code/HiGHS/issues/3434, with presolve on.
+// The same defect as "issue-3434": untransform() drops coefficients with
+// |val| <= small_matrix_value without relaxing the RHS, which can tighten a
+// cut enough to remove every optimal solution. This model (53 rows, 75
+// integer columns) is solved with presolve on and mip_rel_gap = 0; without
+// the fix HiGHS reports Optimal 1787864 with dual bound 1787864 at seeds 0,
+// 2, 3 and 4 (also with the user_bound_scale it suggests), while the witness
+// below is feasible with objective 1787863.
+TEST_CASE("issue-3434-presolve", "[highs_test_mip_solver]") {
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/issue-3434-presolve.lp";
+  const double witness_value = 1787863;
+  const std::vector<std::pair<std::string, double>> witness = {
+      {"c1", 829254}, {"c2", 3}, {"c3", 0}, {"c4", 0}, {"c5", 2}, {"c6", 3},
+      {"c7", 609359}, {"c8", 205168}, {"c9", 4}, {"c10", 4}, {"c11", 4},
+      {"c12", 9}, {"c13", 0}, {"c14", 2495040}, {"c15", 0}, {"c16", 4},
+      {"c17", 0}, {"c18", 146000}, {"c19", 0}, {"c20", 0}, {"c21", 52847},
+      {"c22", 4}, {"c23", 196768}, {"c24", 327572}, {"c25", 1786744},
+      {"c26", 82047}, {"c27", 347841}, {"c28", 209567}, {"c29", 0},
+      {"c30", 0}, {"c31", 3}, {"c32", 30468}, {"c33", 34784},
+      {"c34", 773854}, {"c35", 4}, {"c36", 0}, {"c37", 0}, {"c38", 3},
+      {"c39", 1}, {"c40", 0}, {"c41", 1}, {"c42", 0}, {"c43", 4},
+      {"c44", 82925}, {"c45", 0}, {"c46", 32757}, {"c47", 1453852},
+      {"c48", 0}, {"c49", 1042284}, {"c50", 3}, {"c51", 77385},
+      {"c52", 104228}, {"c53", 4}, {"c54", 4}, {"c55", 2088563}, {"c56", 0},
+      {"c57", 0}, {"c58", 1967683}, {"c59", 23}, {"c60", 145385},
+      {"c61", 2095674}, {"c62", 0}, {"c63", 0}, {"c64", 178674}, {"c65", 0},
+      {"c66", 4}, {"c67", 973336}, {"c68", 1367785}, {"c69", 528467},
+      {"c70", 546978}, {"c71", 0}, {"c72", 208856}, {"c73", 0}, {"c74", 4},
+      {"c75", 10}};
+
+  for (HighsInt seed : {0, 2, 3, 4}) {
+    Highs highs;
+    highs.setOptionValue("output_flag", dev_run);
+    REQUIRE(highs.readModel(filename) == HighsStatus::kOk);
+    const HighsLp& lp = highs.getLp();
+
+    // The witness is feasible with objective 1787863. All data and values
+    // are integers below 2^53, so this double arithmetic is exact.
+    std::vector<double> x(lp.num_col_, 0);
+    for (const auto& nv : witness) {
+      HighsInt col;
+      REQUIRE(highs.getColByName(nv.first, col) == HighsStatus::kOk);
+      x[col] = nv.second;
+    }
+    double witness_objective = 0;
+    for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++) {
+      REQUIRE(x[iCol] >= lp.col_lower_[iCol]);
+      REQUIRE(x[iCol] <= lp.col_upper_[iCol]);
+      REQUIRE(x[iCol] == std::round(x[iCol]));
+      witness_objective += lp.col_cost_[iCol] * x[iCol];
+    }
+    std::vector<double> row_activity(lp.num_row_, 0);
+    for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++)
+      for (HighsInt iEl = lp.a_matrix_.start_[iCol];
+           iEl < lp.a_matrix_.start_[iCol + 1]; iEl++)
+        row_activity[lp.a_matrix_.index_[iEl]] +=
+            lp.a_matrix_.value_[iEl] * x[iCol];
+    for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+      REQUIRE(row_activity[iRow] >= lp.row_lower_[iRow]);
+      REQUIRE(row_activity[iRow] <= lp.row_upper_[iRow]);
+    }
+    REQUIRE(witness_objective == witness_value);
+
+    // presolve on (default), mip_rel_gap = 0: an Optimal claim needs a dual
+    // bound no greater than the value of a feasible solution
+    REQUIRE(highs.setOptionValue("mip_rel_gap", 0) == HighsStatus::kOk);
+    REQUIRE(highs.setOptionValue("random_seed", seed) == HighsStatus::kOk);
+    REQUIRE(highs.run() == HighsStatus::kOk);
+    REQUIRE(highs.getModelStatus() == HighsModelStatus::kOptimal);
+    const HighsInfo& info = highs.getInfo();
+    REQUIRE(info.mip_dual_bound <= witness_value + 1e-6);
+    REQUIRE(info.objective_function_value <= witness_value + 1e-6);
+
+    highs.resetGlobalScheduler(true);
+  }
+}
