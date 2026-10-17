@@ -2622,3 +2622,72 @@ TEST_CASE("issue-3434-presolve", "[highs_test_mip_solver]") {
     highs.resetGlobalScheduler(true);
   }
 }
+
+// The same defect as "issue-3434", in a smaller model (23 rows, 27 integer
+// columns) solved with presolve on and mip_rel_gap = 0. Without the fix HiGHS
+// reports Optimal 680847 with dual bound 680847 at seeds 0-4, also with the
+// user_bound_scale it suggests (-3), while the witness below is feasible with
+// objective 680846.
+TEST_CASE("issue-3434-small", "[highs_test_mip_solver]") {
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/issue-3434-small.lp";
+  const double witness_value = 680846;
+  const std::vector<std::pair<std::string, double>> witness = {
+      {"c1", 0}, {"c2", 39572}, {"c3", 272550}, {"c4", 792730}, {"c5", 0},
+      {"c6", 0}, {"c7", 138186}, {"c8", 4}, {"c9", 129544}, {"c10", 0},
+      {"c11", 0}, {"c12", 3}, {"c13", 2173474}, {"c14", 395724}, {"c15", 4},
+      {"c16", 2156783}, {"c17", 1295442}, {"c18", 0}, {"c19", 334473},
+      {"c20", 79273}, {"c21", 0}, {"c22", 178911}, {"c23", 17891},
+      {"c24", 1381864}, {"c25", 33447}, {"c26", 27255}, {"c27", 215678}};
+
+  for (HighsInt user_bound_scale : {0, -3}) {
+    for (HighsInt seed : {0, 1, 2, 3, 4}) {
+      Highs highs;
+      highs.setOptionValue("output_flag", dev_run);
+      REQUIRE(highs.readModel(filename) == HighsStatus::kOk);
+      const HighsLp& lp = highs.getLp();
+
+      // The witness is feasible with objective 680846. All data and values
+      // are integers below 2^53, so this double arithmetic is exact.
+      std::vector<double> x(lp.num_col_, 0);
+      for (const auto& nv : witness) {
+        HighsInt col;
+        REQUIRE(highs.getColByName(nv.first, col) == HighsStatus::kOk);
+        x[col] = nv.second;
+      }
+      double witness_objective = 0;
+      for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++) {
+        REQUIRE(x[iCol] >= lp.col_lower_[iCol]);
+        REQUIRE(x[iCol] <= lp.col_upper_[iCol]);
+        REQUIRE(x[iCol] == std::round(x[iCol]));
+        witness_objective += lp.col_cost_[iCol] * x[iCol];
+      }
+      std::vector<double> row_activity(lp.num_row_, 0);
+      for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++)
+        for (HighsInt iEl = lp.a_matrix_.start_[iCol];
+             iEl < lp.a_matrix_.start_[iCol + 1]; iEl++)
+          row_activity[lp.a_matrix_.index_[iEl]] +=
+              lp.a_matrix_.value_[iEl] * x[iCol];
+      for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+        REQUIRE(row_activity[iRow] >= lp.row_lower_[iRow]);
+        REQUIRE(row_activity[iRow] <= lp.row_upper_[iRow]);
+      }
+      REQUIRE(witness_objective == witness_value);
+
+      // presolve on (default), mip_rel_gap = 0: an Optimal claim needs a
+      // dual bound no greater than the value of a feasible solution. HighsInfo
+      // reports values for the unscaled model whatever user_bound_scale is.
+      REQUIRE(highs.setOptionValue("mip_rel_gap", 0) == HighsStatus::kOk);
+      REQUIRE(highs.setOptionValue("random_seed", seed) == HighsStatus::kOk);
+      REQUIRE(highs.setOptionValue("user_bound_scale", user_bound_scale) ==
+              HighsStatus::kOk);
+      REQUIRE(highs.run() == HighsStatus::kOk);
+      REQUIRE(highs.getModelStatus() == HighsModelStatus::kOptimal);
+      const HighsInfo& info = highs.getInfo();
+      REQUIRE(info.mip_dual_bound <= witness_value + 1e-6);
+      REQUIRE(info.objective_function_value <= witness_value + 1e-6);
+
+      highs.resetGlobalScheduler(true);
+    }
+  }
+}
