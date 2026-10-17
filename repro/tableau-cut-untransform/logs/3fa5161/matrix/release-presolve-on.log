@@ -1,0 +1,65 @@
+Running HiGHS 1.15.1 (git hash: 3fa5161b1f): Copyright (c) 2026 under MIT licence terms
+Includes third-party software components, see THIRD_PARTY_NOTICES.md for full details
+Command line parsed using CLI11 2.5.0: Copyright (c) 2017-2025 University of Cincinnati
+Set option presolve to "on"
+Set option solution_file to "logs/sol-presolve-on.sol"
+Set option mip_rel_gap to 0
+MIP highs-tableau-cut-mre has 21 rows; 24 cols; 29 nonzeros; 24 integer variables (0 binary)
+Coefficient ranges:
+  Matrix  [1e+00, 5e+01]
+  Cost    [1e+00, 1e+00]
+  Bound   [5e+04, 3e+06]
+  RHS     [4e+00, 9e+06]
+WARNING: Problem has some excessively large bounds on non-continuous variables
+WARNING: Problem has some excessively large bounds on constraints
+WARNING:    Consider scaling the    bounds by 1e-1, or setting the user_bound_scale option to -4
+WARNING: Problem is badly scaled, which may compromise the speed, accuracy and reliability of solvers in HiGHS
+Presolving model
+21 rows, 24 cols, 29 nonzeros 0s
+5 rows, 8 cols, 11 nonzeros 0s
+5 rows, 8 cols, 11 nonzeros 0s
+Presolve reductions: rows 5(-16); columns 8(-16); nonzeros 11(-18) 
+Objective function is integral with scale 1
+
+Solving MIP model with:
+   5 rows
+   8 cols (0 binary, 8 integer, 0 implied int., 0 continuous, 0 domain fixed)
+   11 nonzeros
+   Thread count 2 (of 2 threads). Using 1 max workers. Parallel search off
+
+Src: B => Branching; C => Central rounding; F => Feasibility pump; H => Heuristic;
+     I => Shifting; J => Feasibility jump; L => Sub-MIP; P => Empty MIP; R => Randomized rounding;
+     S => Solve LP; T => Evaluate node; U => Unbounded; X => User solution; Y => HiGHS solution;
+     Z => ZI Round; l => Trivial lower; p => Trivial point; u => Trivial upper; z => Trivial zero
+
+        Nodes      |    B&B Tree     |            Objective Bounds              |  Dynamic Constraints |       Work      
+Src  Proc. InQueue |  Leaves   Expl. | BestBound       BestSol              Gap |   Cuts   InLp Confl. | LpIters     Time
+
+ u       0       0         0   0.00%   -inf            2803314            Large        0      0      0         0     0.0s
+ J       0       0         0   0.00%   -inf            2467655            Large        0      0      0         0     0.0s
+         0       0         0   0.00%   2467653.75      2467655            0.00%        0      0      1         0     0.0s
+ H       0       0         0   0.00%   2467654         2467654            0.00%       52     14     27        19     0.0s
+         1       0         1 100.00%   2467654         2467654            0.00%       52     14     28        19     0.0s
+
+Solving report
+  Model             highs-tableau-cut-mre
+  Status            Optimal
+  Primal bound      2467654
+  Dual bound        2467654
+  Gap               0%
+  P-D integral      6.01297369727e-05
+  Solution status   feasible
+                    2467654 (objective)
+                    2.421438694e-08 (integrality violation)
+  Timing            0.03
+                    0.00 (Presolve)
+                    0.03 (Solve)
+                    0.00 (Postsolve)
+  Max sub-MIP depth 0
+  Nodes             1
+  Repair LPs        0
+  LP iterations     19
+                    0 (strong br.)
+                    19 (separation)
+                    0 (heuristics)
+Writing the solution to logs/sol-presolve-on.sol

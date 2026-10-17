@@ -1,0 +1,4 @@
+mip_rel_gap = 0
+presolve = off
+threads = 1
+mip_debug_solution_file = highs-tableau-cut-mre.known.sol

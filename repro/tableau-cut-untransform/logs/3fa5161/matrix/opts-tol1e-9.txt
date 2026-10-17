@@ -1,0 +1,4 @@
+mip_rel_gap = 0
+presolve = off
+mip_feasibility_tolerance = 1e-9
+primal_feasibility_tolerance = 1e-9

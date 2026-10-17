@@ -1,0 +1,15 @@
+diff --git a/highs/mip/HighsTransformedLp.cpp b/highs/mip/HighsTransformedLp.cpp
+index 873f7da1b9..b7f02f0d28 100644
+--- a/highs/mip/HighsTransformedLp.cpp
++++ b/highs/mip/HighsTransformedLp.cpp
+@@ -576,8 +576,8 @@ bool HighsTransformedLp::untransform(std::vector<double>& vals,
+     auto IsZero = [&](HighsInt col, double val) {
+       assert(col < mip.numCol());
+       double absval = std::abs(val);
+-      if (absval <= mip.options_mip_->small_matrix_value) return true;
+-
++      // EXPERIMENT: relax tiny coefficients against the bound too, instead of
++      // dropping them without adjusting the right-hand side.
+       if (absval <= mip.mipdata_->feastol) {
+         if (val > 0) {
+           if (globaldom_.col_lower_[col] == -kHighsInf)

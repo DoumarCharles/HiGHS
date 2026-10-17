@@ -1,0 +1,3 @@
+mip_rel_gap = 0
+presolve = off
+random_seed = 3

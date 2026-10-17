@@ -1,0 +1,97 @@
+No source file named HighsTableauSeparator.cpp.
+Breakpoint 1 (HighsTableauSeparator.cpp:232) pending.
+No source file named HighsTableauSeparator.cpp.
+Breakpoint 2 (HighsTableauSeparator.cpp:237) pending.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+Running HiGHS 1.15.1 (git hash: 3fa5161b1f): Copyright (c) 2026 under MIT licence terms
+Includes third-party software components, see THIRD_PARTY_NOTICES.md for full details
+Command line parsed using CLI11 2.5.0: Copyright (c) 2017-2025 University of Cincinnati
+Set option presolve to "off"
+Set option threads to 1
+Set option mip_debug_solution_file to "highs-tableau-cut-mre.known.sol"
+Set option mip_rel_gap to 0
+MIP highs-tableau-cut-mre has 21 rows; 24 cols; 29 nonzeros; 24 integer variables (0 binary)
+Coefficient ranges:
+  Matrix  [1e+00, 5e+01]
+  Cost    [1e+00, 1e+00]
+  Bound   [5e+04, 3e+06]
+  RHS     [4e+00, 9e+06]
+WARNING: Problem has some excessively large bounds on non-continuous variables
+WARNING: Problem has some excessively large bounds on constraints
+WARNING:    Consider scaling the    bounds by 1e-1, or setting the user_bound_scale option to -4
+WARNING: Problem is badly scaled, which may compromise the speed, accuracy and reliability of solvers in HiGHS
+debug sol active
+
+Presolve is switched off
+Objective function is integral with scale 1
+
+Solving MIP model with:
+   21 rows
+   24 cols (0 binary, 22 integer, 0 implied int., 0 continuous, 2 domain fixed)
+   29 nonzeros
+   Thread count 1 (of 2 threads). Using 1 max workers. Parallel search off
+
+Src: B => Branching; C => Central rounding; F => Feasibility pump; H => Heuristic;
+     I => Shifting; J => Feasibility jump; L => Sub-MIP; P => Empty MIP; R => Randomized rounding;
+     S => Solve LP; T => Evaluate node; U => Unbounded; X => User solution; Y => HiGHS solution;
+     Z => ZI Round; l => Trivial lower; p => Trivial point; u => Trivial upper; z => Trivial zero
+
+        Nodes      |    B&B Tree     |            Objective Bounds              |  Dynamic Constraints |       Work      
+Src  Proc. InQueue |  Leaves   Expl. | BestBound       BestSol              Gap |   Cuts   InLp Confl. | LpIters     Time
+
+ J       0       0         0   0.00%   -inf            2467655            Large        0      0      0         0     0.1s
+         0       0         0   0.00%   2467653.75      2467655            0.00%        0      0      0         5     0.1s
+== tableau base row (first generateCut, line 232)
+$1 = 19
+$2 = 0.19999999999999996
+$3 = std::vector of length 2, capacity 2 = {{first = 1, second = 0.15000000000000002}, {first = 19, second = 0.050000000000000003}}
+$4 = std::vector of length 4, capacity 4 = {43, 22, 25, 17}
+$5 = std::vector of length 4, capacity 4 = {-0.050000000000000003, 0.15000000000000002, -0.15000000000000002, 1}
+== tableau base row (second generateCut, line 237)
+$6 = std::vector of length 4, capacity 4 = {43, 22, 25, 17}
+$7 = std::vector of length 4, capacity 4 = {0.050000000000000003, -0.15000000000000002, 0.15000000000000002, -1}
+== tableau base row (first generateCut, line 232)
+$8 = 11
+$9 = 0.10000000000582077
+$10 = std::vector of length 3, capacity 3 = {{first = 0, second = 0.10000000000000001}, {first = 11, second = 0.10000000000000001}, {first = 12, second = 0.10000000000000001}}
+$11 = std::vector of length 5, capacity 5 = {10, 36, 24, 9, 35}
+$12 = std::vector of length 5, capacity 5 = {1, -0.10000000000000001, -0.10000000000000001, 1, -0.10000000000000001}
+== tableau base row (second generateCut, line 237)
+$13 = std::vector of length 5, capacity 5 = {10, 36, 24, 9, 35}
+$14 = std::vector of length 5, capacity 5 = {-1, 0.10000000000000001, 0.10000000000000001, -1, 0.10000000000000001}
+highs: /home/claude/work/highs-src/highs/mip/HighsDebugSol.cpp:179: void HighsDebugSol::checkCut(const HighsInt *, const double *, HighsInt, double): Assertion `violation <= mipsolver->mipdata_->feastol' failed.
+
+Program received signal SIGABRT, Aborted.
+__pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+warning: 44	./nptl/pthread_kill.c: No such file or directory
+== stopped
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#3  0x00007ffff6a4527e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff6a288ff in __GI_abort () at ./stdlib/abort.c:79
+#5  0x00007ffff6a2881b in __assert_fail_base (fmt=0x7ffff6bd1208 "%s%s%s:%u: %s%sAssertion `%s' failed.\n%n", assertion=assertion@entry=0x7ffff7c90a7d "violation <= mipsolver->mipdata_->feastol", file=file@entry=0x7ffff7c90956 "/home/claude/work/highs-src/highs/mip/HighsDebugSol.cpp", line=line@entry=179, function=function@entry=0x7ffff7c90aa7 "void HighsDebugSol::checkCut(const HighsInt *, const double *, HighsInt, double)") at ./assert/assert.c:96
+#6  0x00007ffff6a3b517 in __assert_fail (assertion=0x7ffff7c90a7d "violation <= mipsolver->mipdata_->feastol", file=0x7ffff7c90956 "/home/claude/work/highs-src/highs/mip/HighsDebugSol.cpp", line=179, function=0x7ffff7c90aa7 "void HighsDebugSol::checkCut(const HighsInt *, const double *, HighsInt, double)") at ./assert/assert.c:105
+#7  0x00007ffff7884601 in HighsDebugSol::checkCut (this=0x5555556af0a8, Rindex=0x5555557b53d0, Rvalue=0x55555576af60, Rlen=2, rhs=-81456.750002107379) at /home/claude/work/highs-src/highs/mip/HighsDebugSol.cpp:179
+#8  0x00007ffff785b07c in HighsCutGeneration::generateCut (this=0x7ffffffef488, transLp=..., inds_=std::vector of length 2, capacity 5 = {...}, vals_=std::vector of length 2, capacity 5 = {...}, rhs_=@0x7ffffffef1a8: -81456.750002107379, onlyInitialCMIRScale=false) at /home/claude/work/highs-src/highs/mip/HighsCutGeneration.cpp:1167
+#9  0x00007ffff79c28e8 in HighsTableauSeparator::separateLpSolution (this=0x555555758610, lpRelaxation=..., lpAggregator=..., transLp=..., cutpool=...) at /home/claude/work/highs-src/highs/mip/HighsTableauSeparator.cpp:237
+#10 0x00007ffff79c171b in HighsSeparator::run (this=0x555555758610, lpRelaxation=..., lpAggregator=..., transLp=..., cutpool=...) at /home/claude/work/highs-src/highs/mip/HighsSeparator.cpp:40
+#11 0x00007ffff79bf3e6 in HighsSeparation::separationRound (this=0x7fffffff0028, propdomain=..., status=@0x7fffffff0288: HighsLpRelaxation::Status::kOptimal) at /home/claude/work/highs-src/highs/mip/HighsSeparation.cpp:143
+#12 0x00007ffff793f97e in HighsMipSolverData::rootSeparationRound (this=0x5555556ae0d0, worker=..., sepa=..., ncuts=@0x7fffffff001c: 0, status=@0x7fffffff0288: HighsLpRelaxation::Status::kOptimal) at /home/claude/work/highs-src/highs/mip/HighsMipSolverData.cpp:1863
+#13 0x00007ffff7941c50 in HighsMipSolverData::evaluateRootNode (this=0x5555556ae0d0, worker=...) at /home/claude/work/highs-src/highs/mip/HighsMipSolverData.cpp:2213
+#7  0x00007ffff7884601 in HighsDebugSol::checkCut (this=0x5555556af0a8, Rindex=0x5555557b53d0, Rvalue=0x55555576af60, Rlen=2, rhs=-81456.750002107379) at /home/claude/work/highs-src/highs/mip/HighsDebugSol.cpp:179
+179	  assert(violation <= mipsolver->mipdata_->feastol);
+$15 = 2.1073006791993976e-05
+$16 = 9.9999999999999995e-07
+$17 = -81456.750002107379
+$18 = 2
+$19 = {10, 9}
+$20 = {-0.44999999989522621, -0.44999999989522621}
+$21 = std::vector of length 24, capacity 24 = {86825, 72419, 52560, 40772, 154642, 346823, 304025, 79895, 104982, 0, 181015, 46252, 73106, 107934, 135643, 188249, 428319, 0, 64193, 4, 1810153, 3, 12, 3}
+#8  0x00007ffff785b07c in HighsCutGeneration::generateCut (this=0x7ffffffef488, transLp=..., inds_=std::vector of length 2, capacity 5 = {...}, vals_=std::vector of length 2, capacity 5 = {...}, rhs_=@0x7ffffffef1a8: -81456.750002107379, onlyInitialCMIRScale=false) at /home/claude/work/highs-src/highs/mip/HighsCutGeneration.cpp:1167
+1167	  lpRelaxation.getMipSolver().mipdata_->debugSolution.checkCut(inds, vals,
+$22 = (double &) @0x7ffffffef1a8: -81456.750002107379
+$23 = 2
+$24 = std::vector of length 2, capacity 5 = {10, 9}
+$25 = std::vector of length 2, capacity 5 = {-0.44999999989522621, -0.44999999989522621}

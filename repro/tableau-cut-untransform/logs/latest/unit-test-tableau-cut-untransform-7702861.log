@@ -1,0 +1,21 @@
+Filters: tableau-cut-untransform
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+unit_tests is a Catch v2.13.8 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+tableau-cut-untransform
+-------------------------------------------------------------------------------
+/home/claude/highs/check/TestMipSolver.cpp:2488
+...............................................................................
+
+/home/claude/highs/check/TestMipSolver.cpp:2541: FAILED:
+  REQUIRE( info.mip_dual_bound <= proven_optimum + 1e-6 )
+with expansion:
+  2467655.0 <= 2467654.0000009998
+
+===============================================================================
+test cases:   1 |   0 passed | 1 failed
+assertions: 121 | 120 passed | 1 failed
+

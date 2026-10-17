@@ -1,0 +1,84 @@
+No source file named HighsCutGeneration.cpp.
+Breakpoint 1 (HighsCutGeneration.cpp:1160) pending.
+No source file named HighsTransformedLp.cpp.
+Breakpoint 2 (HighsTransformedLp.cpp:598) pending.
+No source file named HighsTransformedLp.cpp.
+Breakpoint 3 (HighsTransformedLp.cpp:603) pending.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+Running HiGHS 1.15.1 (git hash: 3fa5161b1f): Copyright (c) 2026 under MIT licence terms
+Includes third-party software components, see THIRD_PARTY_NOTICES.md for full details
+Command line parsed using CLI11 2.5.0: Copyright (c) 2017-2025 University of Cincinnati
+Set option presolve to "off"
+Set option threads to 1
+Set option mip_debug_solution_file to "highs-tableau-cut-mre.known.sol"
+Set option mip_rel_gap to 0
+MIP highs-tableau-cut-mre has 21 rows; 24 cols; 29 nonzeros; 24 integer variables (0 binary)
+Coefficient ranges:
+  Matrix  [1e+00, 5e+01]
+  Cost    [1e+00, 1e+00]
+  Bound   [5e+04, 3e+06]
+  RHS     [4e+00, 9e+06]
+WARNING: Problem has some excessively large bounds on non-continuous variables
+WARNING: Problem has some excessively large bounds on constraints
+WARNING:    Consider scaling the    bounds by 1e-1, or setting the user_bound_scale option to -4
+WARNING: Problem is badly scaled, which may compromise the speed, accuracy and reliability of solvers in HiGHS
+debug sol active
+
+Presolve is switched off
+Objective function is integral with scale 1
+
+Solving MIP model with:
+   21 rows
+   24 cols (0 binary, 22 integer, 0 implied int., 0 continuous, 2 domain fixed)
+   29 nonzeros
+   Thread count 1 (of 2 threads). Using 1 max workers. Parallel search off
+
+Src: B => Branching; C => Central rounding; F => Feasibility pump; H => Heuristic;
+     I => Shifting; J => Feasibility jump; L => Sub-MIP; P => Empty MIP; R => Randomized rounding;
+     S => Solve LP; T => Evaluate node; U => Unbounded; X => User solution; Y => HiGHS solution;
+     Z => ZI Round; l => Trivial lower; p => Trivial point; u => Trivial upper; z => Trivial zero
+
+        Nodes      |    B&B Tree     |            Objective Bounds              |  Dynamic Constraints |       Work      
+Src  Proc. InQueue |  Leaves   Expl. | BestBound       BestSol              Gap |   Cuts   InLp Confl. | LpIters     Time
+
+ J       0       0         0   0.00%   -inf            2467655            Large        0      0      0         0     0.1s
+         0       0         0   0.00%   2467653.75      2467655            0.00%        0      0      0         5     0.1s
+== before untransform: rowlen=2 rhs=167829.82500000001
+$1 = std::vector of length 2, capacity 4 = {43, 17}
+$2 = std::vector of length 2, capacity 4 = {0.025000000000000001, 0.10000000000582077}
+== untransform, before cleanup: tmpRhs=0.32500000001164153 (+0)
+   col 17  val=-0.39999999999417923 (+0)  lb=-0 ub=335659
+   col 21  val=0.075000000000000011 (+0)  lb=-0 ub=15
+== untransform, after cleanup: abort=0 tmpRhs=0.32500000001164153
+== before untransform: rowlen=2 rhs=134263.92499804631
+$3 = std::vector of length 2, capacity 4 = {17, 22}
+$4 = std::vector of length 2, capacity 4 = {0.39999999999417946, 0.075000000000000011}
+== untransform, before cleanup: tmpRhs=-0.79999999998835869 (+0)
+   col 17  val=-0.39999999999417946 (+0)  lb=-0 ub=335659
+   col 22  val=-0.075000000000000011 (+0)  lb=-0 ub=15
+== untransform, after cleanup: abort=0 tmpRhs=-0.79999999998835869
+== before untransform: rowlen=4 rhs=190067.10000842914
+$5 = std::vector of length 4, capacity 5 = {10, 36, 35, 9}
+$6 = std::vector of length 4, capacity 5 = {0.050000000046566129, 0.050000000000000003, 0.050000000000000003, 0.050000000046566129}
+== untransform, before cleanup: tmpRhs=9051.1000084291445 (+0)
+   col 10  val=-0.44999999995343387 (+0)  lb=-0 ub=181016
+   col 20  val=0.050000000000000003 (+0)  lb=-0 ub=1810161
+   col 9  val=-0.44999999995343387 (+0)  lb=-0 ub=181016
+   col 19  val=0.050000000000000003 (+0)  lb=-0 ub=1810161
+== untransform, after cleanup: abort=0 tmpRhs=9051.1000084291445
+== before untransform: rowlen=4 rhs=81457.650002107315
+$7 = std::vector of length 4, capacity 5 = {10, 36, 35, 9}
+$8 = std::vector of length 4, capacity 5 = {0.45000000001164153, 1.1641534958251043e-11, 1.1641534958251043e-11, 0.45000000001164153}
+== untransform, before cleanup: tmpRhs=-81456.750002107379 (+-5.8207882958072332e-12)
+   col 10  val=-0.44999999989522621 (+2.78e-17)  lb=-0 ub=181016
+   col 20  val=-1.1641534958251043e-11 (+0)  lb=-0 ub=1810161
+   col 9  val=-0.44999999989522621 (+2.78e-17)  lb=-0 ub=181016
+   col 19  val=-1.1641534958251043e-11 (+0)  lb=-0 ub=1810161
+== untransform, after cleanup: abort=0 tmpRhs=-81456.750002107379
+highs: /home/claude/work/highs-src/highs/mip/HighsDebugSol.cpp:179: void HighsDebugSol::checkCut(const HighsInt *, const double *, HighsInt, double): Assertion `violation <= mipsolver->mipdata_->feastol' failed.
+
+Program received signal SIGABRT, Aborted.
+__pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+warning: 44	./nptl/pthread_kill.c: No such file or directory
+== stopped at assertion

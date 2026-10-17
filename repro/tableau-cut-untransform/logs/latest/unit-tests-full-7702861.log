@@ -1,0 +1,87 @@
+Running HiGHS 1.15.1 (git hash: 770286103): Copyright (c) 2026 under MIT licence terms
+Includes third-party software components, see THIRD_PARTY_NOTICES.md for full details
+LP avgas has 10 rows; 8 cols; 30 nonzeros
+Coefficient ranges:
+  Matrix  [1e+00, 5e+00]
+  Cost    [1e+00, 5e+00]
+  Bound   [1e+00, 1e+00]
+  RHS     [1e+00, 2e+00]
+Presolving model
+10 rows, 8 cols, 30 nonzeros 0s
+10 rows, 8 cols, 30 nonzeros 0s
+Presolve reductions: rows 10(-0); columns 8(-0); nonzeros 30(-0) - Not reduced
+Problem not reduced by presolve: solving the LP
+Choosing to use dual simplex solver
+Using dual simplex solver
+  Iteration        Objective     Infeasibilities num(sum)
+          0     0.0000000000e+00 Ph1: 0(0) 0.0s
+          6    -7.7500000000e+00 Pr: 0(0) 0.0s
+
+Model name          : avgas
+Model status        : Optimal
+Simplex   iterations: 6
+Objective value     : -7.7500000000e+00
+P-D objective error :  0.0000000000e+00
+HiGHS run time      :          0.00
+LP avgas has 10 rows; 8 cols; 30 nonzeros
+Coefficient ranges:
+  Matrix  [1e+00, 5e+00]
+  Cost    [1e+00, 5e+00]
+  Bound   [1e+00, 1e+00]
+  RHS     [1e+00, 2e+00]
+Solving LP with useful basis so presolve not used
+
+Model name          : avgas
+Model status        : Optimal
+Objective value     : -7.7500000000e+00
+P-D objective error :  0.0000000000e+00
+HiGHS run time      :          0.00
+WARNING: col             2 has inconsistent bounds [           2,            1]
+WARNING: col             3 has inconsistent bounds [           3,            1]
+WARNING: col             4 has inconsistent bounds [           4,            1]
+LP avgas has 10 rows; 8 cols; 30 nonzeros
+Coefficient ranges:
+  Matrix  [1e+00, 5e+00]
+  Cost    [1e+00, 5e+00]
+  Bound   [1e+00, 1e+00]
+  RHS     [1e+00, 2e+00]
+Solving LP with useful basis so presolve not used
+
+Model name          : avgas
+Model status        : Optimal
+Objective value     : -7.7500000000e+00
+P-D objective error :  0.0000000000e+00
+HiGHS run time      :          0.00
+LP avgas has 10 rows; 8 cols; 30 nonzeros
+Coefficient ranges:
+  Matrix  [1e+00, 5e+00]
+  Cost    [1e+00, 5e+00]
+  Bound   [1e+00, 1e+00]
+  RHS     [1e+00, 2e+00]
+Solving LP with useful basis so presolve not used
+
+Model name          : avgas
+Model status        : Optimal
+Objective value     : -7.7500000000e+00
+P-D objective error :  0.0000000000e+00
+HiGHS run time      :          0.00
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+unit_tests is a Catch v2.13.8 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+tableau-cut-untransform
+-------------------------------------------------------------------------------
+/home/claude/highs/check/TestMipSolver.cpp:2488
+...............................................................................
+
+/home/claude/highs/check/TestMipSolver.cpp:2541: FAILED:
+  REQUIRE( info.mip_dual_bound <= proven_optimum + 1e-6 )
+with expansion:
+  2467655.0 <= 2467654.0000009998
+
+===============================================================================
+test cases:     439 |     438 passed | 1 failed
+assertions: 1260936 | 1260935 passed | 1 failed
+

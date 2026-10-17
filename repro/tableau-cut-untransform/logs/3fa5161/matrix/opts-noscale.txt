@@ -1,0 +1,3 @@
+mip_rel_gap = 0
+presolve = off
+simplex_scale_strategy = 0

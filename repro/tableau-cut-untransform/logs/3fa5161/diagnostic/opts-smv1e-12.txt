@@ -1,0 +1,4 @@
+mip_rel_gap = 0
+presolve = off
+threads = 1
+small_matrix_value = 1e-12

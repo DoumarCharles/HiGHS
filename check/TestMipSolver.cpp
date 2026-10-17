@@ -2472,3 +2472,74 @@ TEST_CASE("issue-3389-binding-row", "[highs_test_mip_solver]") {
   }
   highs.resetGlobalScheduler(true);
 }
+
+// Tableau cut made invalid in HighsTransformedLp::untransform(): slack
+// substitution leaves coefficients of about -1.16e-11 on two columns with
+// upper bound 1810161. They are below small_matrix_value (1e-9), so the
+// cleanup drops them without relaxing the RHS, which tightens the cut by
+// about 2.1e-5. Since p_23 + p_24 is integer, the cut p_23 + p_24 >=
+// 181015.0000468 removes every optimal solution, and HiGHS reports Optimal
+// 2467655 with dual bound 2467655.
+//
+// The optimum is 2467654: the 14 single-variable rows give a total of at
+// least 1785174, r_23 + r_24 + g_9 give p_23 + p_24 >= 181015, and
+// r_9 + r_10 + r_44 + 3 g_16 give p_9 + p_10 + p_44 >= 501465. The witness
+// below attains this bound.
+TEST_CASE("tableau-cut-untransform", "[highs_test_mip_solver]") {
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/tableau-cut-untransform.lp";
+  const double proven_optimum = 2467654;
+  const std::vector<std::pair<std::string, double>> witness = {
+      {"x_25", 4},       {"x_26", 1810153}, {"x_50", 3},
+      {"x_51", 12},      {"x_11", 3},       {"p_0", 86825},
+      {"p_4", 72419},    {"p_6", 52560},    {"p_7", 40772},
+      {"p_9", 154642},   {"p_10", 346823},  {"p_11", 304025},
+      {"p_16", 79895},   {"p_21", 104982},  {"p_23", 0},
+      {"p_24", 181015},  {"p_27", 46252},   {"p_28", 73106},
+      {"p_29", 107934},  {"p_30", 135643},  {"p_34", 188249},
+      {"p_42", 428319},  {"p_44", 0},       {"p_45", 64193}};
+
+  Highs highs;
+  highs.setOptionValue("output_flag", dev_run);
+  REQUIRE(highs.readModel(filename) == HighsStatus::kOk);
+  const HighsLp& lp = highs.getLp();
+
+  // The witness is feasible and has objective 2467654. All data and values
+  // are integers below 2^53, so this double arithmetic is exact.
+  std::vector<double> x(lp.num_col_, 0);
+  for (const auto& nv : witness) {
+    HighsInt col;
+    REQUIRE(highs.getColByName(nv.first, col) == HighsStatus::kOk);
+    x[col] = nv.second;
+  }
+  double witness_objective = 0;
+  for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++) {
+    REQUIRE(x[iCol] >= lp.col_lower_[iCol]);
+    REQUIRE(x[iCol] <= lp.col_upper_[iCol]);
+    witness_objective += lp.col_cost_[iCol] * x[iCol];
+  }
+  std::vector<double> row_activity(lp.num_row_, 0);
+  for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++)
+    for (HighsInt iEl = lp.a_matrix_.start_[iCol];
+         iEl < lp.a_matrix_.start_[iCol + 1]; iEl++)
+      row_activity[lp.a_matrix_.index_[iEl]] +=
+          lp.a_matrix_.value_[iEl] * x[iCol];
+  for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+    REQUIRE(row_activity[iRow] >= lp.row_lower_[iRow]);
+    REQUIRE(row_activity[iRow] <= lp.row_upper_[iRow]);
+  }
+  REQUIRE(witness_objective == proven_optimum);
+
+  // With mip_rel_gap = 0, an Optimal claim needs a dual bound no greater
+  // than the optimum.
+  REQUIRE(highs.setOptionValue("mip_rel_gap", 0) == HighsStatus::kOk);
+  REQUIRE(highs.setOptionValue("presolve", kHighsOffString) ==
+          HighsStatus::kOk);
+  REQUIRE(highs.run() == HighsStatus::kOk);
+  REQUIRE(highs.getModelStatus() == HighsModelStatus::kOptimal);
+  const HighsInfo& info = highs.getInfo();
+  REQUIRE(info.mip_dual_bound <= proven_optimum + 1e-6);
+  REQUIRE(info.objective_function_value == proven_optimum);
+
+  highs.resetGlobalScheduler(true);
+}
