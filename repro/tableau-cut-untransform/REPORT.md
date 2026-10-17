@@ -1,5 +1,7 @@
 # False `Optimal` from an invalid tableau cut (`HighsTransformedLp::untransform`)
 
+Upstream issue: https://github.com/ERGO-Code/HiGHS/issues/3434
+
 HiGHS reports `Optimal` with primal and dual bound **2467655** on
 `highs-tableau-cut-mre.lp`, whose optimum is **2467654**. A cut from the
 tableau separator is tightened by 2.1e-5 because `untransform()` drops two
@@ -25,9 +27,9 @@ The failure is confirmed on:
 | `verify_optimum.py` | exact rational check of the witness and the lower-bound certificate (standard library only) |
 | `logs/` | release and DEBUGSOL logs, gdb scripts and their output, sensitivity runs, diagnostic experiments |
 
-The C++ regression test is `TEST_CASE("tableau-cut-untransform")` in
+The C++ regression test is `TEST_CASE("issue-3434")` in
 `check/TestMipSolver.cpp`, with the model copied to
-`check/instances/tableau-cut-untransform.lp`.
+`check/instances/issue-3434.lp`.
 
 ## Reproduce
 
@@ -59,7 +61,7 @@ Regression test:
 ```
 cmake -S <HiGHS> -B build -DALL_TESTS=ON
 cmake --build build --target unit_tests
-build/bin/unit_tests "tableau-cut-untransform"
+build/bin/unit_tests "issue-3434"
 ```
 
 ## Proof that the optimum is 2467654
@@ -149,7 +151,7 @@ differs from both:
 
 | run | result | log |
 |---|---|---|
-| `unit_tests "tableau-cut-untransform"` | **FAILED**: `REQUIRE( info.mip_dual_bound <= proven_optimum + 1e-6 )` with `2467655.0 <= 2467654.0000009998`. The 120 assertions checking the witness pass. | `logs/latest/unit-test-tableau-cut-untransform-7702861.log` |
+| `unit_tests "issue-3434"` | **FAILED**: `REQUIRE( info.mip_dual_bound <= proven_optimum + 1e-6 )` with `2467655.0 <= 2467654.0000009998`. The 120 assertions checking the witness pass. | `logs/latest/unit-test-issue-3434-7702861.log` (the same test before the rename: `unit-test-tableau-cut-untransform-7702861.log`) |
 | full `unit_tests` | 439 test cases: 438 passed, 1 failed (only the new test) | `logs/latest/unit-tests-full-7702861.log` |
 | new test with the diagnostic patch applied | passed (122 assertions) | `logs/latest/unit-test-tableau-cut-untransform-WITH-DIAGNOSTIC-PATCH.log` |
 | `[highs_test_mip_solver]` with the diagnostic patch applied | 65 test cases, all passed | `logs/latest/unit-tests-mip-WITH-DIAGNOSTIC-PATCH.log` |

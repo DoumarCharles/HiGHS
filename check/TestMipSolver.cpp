@@ -2473,6 +2473,7 @@ TEST_CASE("issue-3389-binding-row", "[highs_test_mip_solver]") {
   highs.resetGlobalScheduler(true);
 }
 
+// https://github.com/ERGO-Code/HiGHS/issues/3434
 // Tableau cut made invalid in HighsTransformedLp::untransform(): slack
 // substitution leaves coefficients of about -1.16e-11 on two columns with
 // upper bound 1810161. They are below small_matrix_value (1e-9), so the
@@ -2485,9 +2486,9 @@ TEST_CASE("issue-3389-binding-row", "[highs_test_mip_solver]") {
 // least 1785174, r_23 + r_24 + g_9 give p_23 + p_24 >= 181015, and
 // r_9 + r_10 + r_44 + 3 g_16 give p_9 + p_10 + p_44 >= 501465. The witness
 // below attains this bound.
-TEST_CASE("tableau-cut-untransform", "[highs_test_mip_solver]") {
+TEST_CASE("issue-3434", "[highs_test_mip_solver]") {
   const std::string filename =
-      std::string(HIGHS_DIR) + "/check/instances/tableau-cut-untransform.lp";
+      std::string(HIGHS_DIR) + "/check/instances/issue-3434.lp";
   const double proven_optimum = 2467654;
   const std::vector<std::pair<std::string, double>> witness = {
       {"x_25", 4},       {"x_26", 1810153}, {"x_50", 3},
