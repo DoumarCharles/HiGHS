@@ -576,8 +576,10 @@ bool HighsTransformedLp::untransform(std::vector<double>& vals,
     auto IsZero = [&](HighsInt col, double val) {
       assert(col < mip.numCol());
       double absval = std::abs(val);
-      if (absval <= mip.options_mip_->small_matrix_value) return true;
-
+      // Drop tiny coefficients only after relaxing the right-hand side by
+      // val * bound, as for any coefficient up to feastol. Dropping one
+      // without relaxing tightens the cut by |val| * |bound|, which for a
+      // large bound can cut off feasible (even optimal) solutions (#3434).
       if (absval <= mip.mipdata_->feastol) {
         if (val > 0) {
           if (globaldom_.col_lower_[col] == -kHighsInf)
