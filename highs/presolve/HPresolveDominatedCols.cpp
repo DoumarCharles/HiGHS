@@ -65,17 +65,8 @@ HPresolve::Result HPresolve::dominatedColumns(
     return true;
   };
 
-  auto checkDomination = [&](HighsInt scalj, HighsInt j, HighsInt scalk,
+  auto checkSignatures = [&](HighsInt scalj, HighsInt j, HighsInt scalk,
                              HighsInt k) {
-    // increment counter
-    numDomChecks++;
-
-    // rule out domination from integers to continuous variables
-    if (model->integrality_[j] == HighsVarType::kInteger &&
-        model->integrality_[k] == HighsVarType::kContinuous)
-      return false;
-
-    // check the signatures
     uint32_t sjMinus = signatures[j].first;
     uint32_t sjPlus = signatures[j].second;
     if (scalj == -1) std::swap(sjPlus, sjMinus);
@@ -91,6 +82,22 @@ HPresolve::Result HPresolve::dominatedColumns(
     // the set of rows with a positive coefficient must be a subset of the
     // dominated columns set of rows with a positive coefficient
     if ((sjPlus & ~skPlus) != 0) return false;
+
+    return true;
+  };
+
+  auto checkDomination = [&](HighsInt scalj, HighsInt j, HighsInt scalk,
+                             HighsInt k) {
+    // increment counter
+    numDomChecks++;
+
+    // rule out domination from integers to continuous variables
+    if (model->integrality_[j] == HighsVarType::kInteger &&
+        model->integrality_[k] == HighsVarType::kContinuous)
+      return false;
+
+    // check the signatures
+    if (!checkSignatures(scalj, j, scalk, k)) return false;
 
     // the dominating columns cost must be smaller or equal to the dominated
     // columns cost
@@ -360,6 +367,14 @@ HPresolve::Result HPresolve::dominatedColumns(
 
         // skip column 'col' and deleted columns
         if (k == col || colDeleted[k]) continue;
+
+        // research (presolve_domcol_count_possible): skip pairs whose
+        // signatures rule out domination in both directions, so they do not
+        // count as predictive bound analysis work
+        if (options->presolve_domcol_count_possible &&
+            !checkSignatures(direction, col, direction, k) &&
+            !checkSignatures(direction, col, -direction, k))
+          continue;
 
         // get coefficient
         double ak = Avalue[pos];

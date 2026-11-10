@@ -463,6 +463,7 @@ struct HighsOptionsStruct {
   HighsInt presolve_rule_off;
   HighsInt presolve_rule_test;
   bool presolve_rule_logging;
+  bool presolve_domcol_count_possible;
   bool presolve_remove_slacks;
   bool presolve_fm_obj_reformulation;
   bool no_unnecessary_rebuild_refactor;
@@ -640,6 +641,7 @@ struct HighsOptionsStruct {
         presolve_rule_off(0),
         presolve_rule_test(0),
         presolve_rule_logging(false),
+        presolve_domcol_count_possible(false),
         presolve_remove_slacks(false),
         presolve_fm_obj_reformulation(false),
         no_unnecessary_rebuild_refactor(false),
@@ -1692,6 +1694,16 @@ class HighsOptions : public HighsOptionsStruct {
     record_bool = new OptionRecordBool(
         "presolve_rule_logging", "Log effectiveness of presolve rules for LP",
         advanced, &presolve_rule_logging, false);
+    records.push_back(record_bool);
+
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_count_possible",
+        "Dominated columns skip a pair whose row signatures rule out "
+        "domination in both directions before any other work, so only "
+        "possible dominations count towards the limit that switches "
+        "predictive bound analysis off (upstream issue 3586). Changes the "
+        "search (research)",
+        advanced, &presolve_domcol_count_possible, false);
     records.push_back(record_bool);
 
     record_bool =
