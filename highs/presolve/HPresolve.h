@@ -175,6 +175,19 @@ class HPresolve {
     return (model->row_upper_[row] != kHighsInf ? val : -val) > 0 ? 1 : 0;
   }
 
+  // research (presolve_domcol_first_visit): while dominated columns runs,
+  // per live column the column being visited when its vector last changed
+  // (-1: never), kept by link / unlink / addToMatrix; per row the touched
+  // columns that are (or were) in it; the epoch counts touches
+  bool domcolFvsTracking = false;
+  HighsInt domcolFvsVisitCol = -1;
+  size_t domcolFvsTouchEpoch = 0;
+  size_t domcolFvsNumTouched = 0;
+  size_t domcolFvsNumExtra = 0;
+  std::vector<HighsInt> domcolFvsTouched;
+  std::vector<std::vector<HighsInt>> domcolFvsExtra;
+  void domcolFvsTouch(HighsInt col, HighsInt newRow);
+
   enum class Result {
     kOk,
     kPrimalInfeasible,

@@ -565,9 +565,33 @@ void HPresolve::link(HighsInt pos) {
       domcolSignCount[2 * Acol[pos] +
                       domcolEntrySign(Arow[pos], Avalue[pos])]++ == 0)
     ++domcolFreeEpoch;
+  if (domcolFvsTracking && !colDeleted[Acol[pos]])
+    domcolFvsTouch(Acol[pos], Arow[pos]);
+}
+
+// research (presolve_domcol_first_visit): the vector of a live column
+// changes; at the first touch the column is added to the extra list of each
+// of its rows, later only to a new row
+void HPresolve::domcolFvsTouch(HighsInt col, HighsInt newRow) {
+  ++domcolFvsTouchEpoch;
+  const HighsInt numRow = static_cast<HighsInt>(domcolFvsExtra.size());
+  if (domcolFvsTouched[col] < 0) {
+    ++domcolFvsNumTouched;
+    for (const HighsSliceNonzero& nonz : getColumnVector(col)) {
+      if (nonz.index() >= numRow) continue;
+      domcolFvsExtra[nonz.index()].push_back(col);
+      ++domcolFvsNumExtra;
+    }
+  } else if (newRow != -1 && newRow < numRow) {
+    domcolFvsExtra[newRow].push_back(col);
+    ++domcolFvsNumExtra;
+  }
+  domcolFvsTouched[col] = domcolFvsVisitCol;
 }
 
 void HPresolve::unlink(HighsInt pos) {
+  if (domcolFvsTracking && !colDeleted[Acol[pos]])
+    domcolFvsTouch(Acol[pos], -1);
   if (domcolSignTracking && !colDeleted[Acol[pos]] &&
       --domcolSignCount[2 * Acol[pos] +
                         domcolEntrySign(Arow[pos], Avalue[pos])] == 0)
@@ -975,6 +999,10 @@ void HPresolve::changeRowLower(HighsInt row, double newLower,
                                bool skipRowDualUpdate) {
   double oldLower = model->row_lower_[row];
   if (oldLower == newLower) return;
+  // research (presolve_domcol_first_visit)
+  if (domcolFvsTracking &&
+      (oldLower == -kHighsInf) != (newLower == -kHighsInf))
+    domcolSignsDirty = true;
   model->row_lower_[row] = newLower;
 
   if (!skipRowDualUpdate) {
@@ -1327,6 +1355,7 @@ void HPresolve::addToMatrix(const HighsInt row, const HighsInt col,
       matrixNonZeroChanged(row, col, Avalue[pos], sum, false, false);
       if (domcolSignTracking && (Avalue[pos] > 0) != (sum > 0))
         domcolSignsDirty = true;
+      if (domcolFvsTracking && !colDeleted[col]) domcolFvsTouch(col, -1);
       Avalue[pos] = sum;
     }
   }
