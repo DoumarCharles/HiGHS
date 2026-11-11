@@ -470,7 +470,7 @@ struct HighsOptionsStruct {
   HighsInt presolve_domcol_repeat;
   bool presolve_cover_subsumption;
   bool presolve_cover_trigger;
-  HighsInt presolve_domcol_long_row_ratio;
+  bool presolve_domcol_mirror_skip;
   bool presolve_remove_slacks;
   bool presolve_fm_obj_reformulation;
   bool no_unnecessary_rebuild_refactor;
@@ -655,7 +655,7 @@ struct HighsOptionsStruct {
         presolve_domcol_repeat(0),
         presolve_cover_subsumption(false),
         presolve_cover_trigger(false),
-        presolve_domcol_long_row_ratio(0),
+        presolve_domcol_mirror_skip(false),
         presolve_remove_slacks(false),
         presolve_fm_obj_reformulation(false),
         no_unnecessary_rebuild_refactor(false),
@@ -1768,14 +1768,16 @@ class HighsOptions : public HighsOptionsStruct {
         advanced, &presolve_cover_trigger, false);
     records.push_back(record_bool);
 
-    record_int = new OptionRecordInt(
-        "presolve_domcol_long_row_ratio",
-        "Dominated columns skip the scan of a column's row of one sign when "
-        "it is more than this many times longer than its row of the other "
-        "sign (0 = never). Changes the search (research)",
-        advanced, &presolve_domcol_long_row_ratio, 0, 0, kHighsIInf);
-    records.push_back(record_int);
 
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_mirror_skip",
+        "Dominated columns skip the scan of a row when every pair in it is "
+        "also listed, as its mirror, by another column's shorter row (no "
+        "opposite-sign entry; each candidate's mirror row strictly shorter, "
+        "ties by index); that scan then tries both fixings. Changes the "
+        "search (research)",
+        advanced, &presolve_domcol_mirror_skip, false);
+    records.push_back(record_bool);
     record_bool =
         new OptionRecordBool("presolve_remove_slacks",
                              "Remove slacks after presolve: redundant option!",
