@@ -3920,6 +3920,7 @@ HPresolve::Result HPresolve::fastPresolveLoop(
 
 HPresolve::Result HPresolve::presolve(HighsPostsolveStack& postsolve_stack) {
   domcolCountPossible = options->presolve_domcol_count_possible;
+  coverLastDeletions = -1;
   // For the innermost loop the rounds are nested with an outer loop
   // that layers the newer presolvers
   //

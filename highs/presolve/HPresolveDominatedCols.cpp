@@ -13,6 +13,7 @@ namespace presolve {
 
 HPresolve::Result HPresolve::dominatedColumns(
     HighsPostsolveStack& postsolve_stack) {
+  const double domcolT0 = timer ? timer->read() : 0.0;
   // See section 6.4 "Dominated columns", Achterberg et al., Presolve Reductions
   // in Mixed Integer Programming, INFORMS Journal on Computing 32(2):473-506.
   // See also Gamrath, G., Koch, T., Martin, A. et al., Progress in presolving
@@ -38,6 +39,8 @@ HPresolve::Result HPresolve::dominatedColumns(
   // research (measurement only, dev log): pairs offered / past the skips
   size_t numPairs = 0;
   size_t numPairsChecked = 0;
+  size_t pairsDir[2] = {0, 0};
+  size_t redsDir[2] = {0, 0};
 
   auto addSignature = [&](HighsInt row, HighsInt col, uint32_t rowLowerFinite,
                           uint32_t rowUpperFinite) {
@@ -457,17 +460,37 @@ HPresolve::Result HPresolve::dominatedColumns(
     bool hasPosCliques =
         isBinary(j) && mipsolver->mipdata_->cliquetable.numCliques(j, 1) > 0;
 
+    // research (presolve_domcol_long_row_ratio): skip the scan of a row far
+    // longer than the column's row of the other sign; its pairs can be found
+    // from the other column's side
+    const HighsInt longRowRatio = options->presolve_domcol_long_row_ratio;
+    const bool bothRows =
+        longRowRatio > 0 && bestRowPlus != -1 && bestRowMinus != -1;
+    const double ratio = static_cast<double>(longRowRatio);
+    const bool skipMinus = bothRows && bestRowMinusLen > ratio * bestRowPlusLen;
+    const bool skipPlus = bothRows && bestRowPlusLen > ratio * bestRowMinusLen;
+
     // use row 'bestRowMinus'
-    if (bestRowMinus != -1 &&
+    if (bestRowMinus != -1 && !skipMinus &&
         (allowPredBndAnalysis || lowerImplied || hasNegCliques))
+    {
+      size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
       HPRESOLVE_CHECKED_CALL(checkRow(bestRowMinus, j, HighsInt{-1},
                                       ajBestRowMinus, hasNegCliques));
+      pairsDir[0] += numPairs - p0;
+      redsDir[0] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
+    }
 
     // use row 'bestRowPlus'
-    if (!colDeleted[j] && bestRowPlus != -1 &&
+    if (!colDeleted[j] && bestRowPlus != -1 && !skipPlus &&
         (allowPredBndAnalysis || upperImplied || hasPosCliques))
+    {
+      size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
       HPRESOLVE_CHECKED_CALL(
           checkRow(bestRowPlus, j, HighsInt{1}, ajBestRowPlus, hasPosCliques));
+      pairsDir[1] += numPairs - p0;
+      redsDir[1] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
+    }
 
     // do not use predictive bound analysis if it requires many domination
     // checks and only yields few fixings or improved bounds on average
@@ -493,11 +516,16 @@ HPresolve::Result HPresolve::dominatedColumns(
                 static_cast<int>(numModifiedBndsPredBndAnalysis));
   highsLogDev(options->log_options, HighsLogType::kVerbose,
               "Dominated columns: %d columns, %.0f pairs, %.0f checked, %.0f "
-              "domination tests, predictive analysis %s\n",
+              "domination tests, predictive analysis %s; minus rows %.0f "
+              "pairs %.0f reductions, plus rows %.0f pairs %.0f reductions; "
+              "%.3f s\n",
               static_cast<int>(numCols), static_cast<double>(numPairs),
               static_cast<double>(numPairsChecked),
               static_cast<double>(numDomChecks),
-              allowPredBndAnalysis ? "on" : "off");
+              allowPredBndAnalysis ? "on" : "off",
+              static_cast<double>(pairsDir[0]), static_cast<double>(redsDir[0]),
+              static_cast<double>(pairsDir[1]), static_cast<double>(redsDir[1]),
+              (timer ? timer->read() : 0.0) - domcolT0);
 
   return Result::kOk;
 }

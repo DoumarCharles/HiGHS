@@ -154,6 +154,9 @@ class HPresolve {
   // dominations (presolve_domcol_count_possible), set by the option or by a
   // covering row removed by coverSubsumption
   bool domcolCountPossible = false;
+  // research (presolve_cover_subsumption): deleted rows + columns at the end
+  // of the last call (-1: none yet)
+  HighsInt coverLastDeletions = -1;
 
   // research (presolve_domcol_row_cache): number of entries linked into the
   // matrix so far; row positions collected earlier stay complete while it is
