@@ -311,8 +311,9 @@ HPresolve::Result HPresolve::dominatedColumns(
   std::vector<HighsInt> fvsPendNext;
   std::vector<HighsInt> fvsPendCol;
   std::vector<uint8_t> fvsPendFlag;
-  // verify: the entry being processed was not given by the lists
-  bool fvsNonCand = false;
+  // treatment of the entry being processed: 0 = as scan-both, 1 = count
+  // only, 2 = verify only
+  HighsInt fvsTreat = 0;
   size_t numFvsOffered = 0;
   size_t numFvsPredScans = 0;
   size_t numFvsFixScans = 0;
@@ -629,6 +630,20 @@ HPresolve::Result HPresolve::dominatedColumns(
       bool tryToFixCol =
           twoWay && isDominatingBoundFinite && (kImplied || kCliques);
       if (tryToFix || tryToFixCol || tryToStrengthenBounds) {
+        // research (presolve_domcol_first_visit): pair not offered: count
+        // it as scan-both does (1), or only test it for the verify option
+        if (fvsTreat != 0) {
+          if (fvsTreat == 1 && !tryToFix) numDomChecksPredBndAnalysis++;
+          if (fvsVerify) {
+            const size_t checks = numDomChecks;
+            if (checkDomination(direction, col, direction_k, k))
+              numFvsMissed++;
+            if (fvsTreat == 2) numDomChecks = checks;
+          } else if (fvsTreat == 1) {
+            numDomChecks++;
+          }
+          return Result::kOk;
+        }
         // increment counter for number of domination checks due to predictive
         // bound analysis
         // (pair once: counted when this column's own fixing is not possible,
@@ -698,9 +713,6 @@ HPresolve::Result HPresolve::dominatedColumns(
                                 dominatingBound, direction * direction_k));
           }
         }
-        // research (presolve_domcol_fvs_verify): a test of scan-both
-        // that holds for a pair the lists did not give
-        if (fvsNonCand && dominated) numFvsMissed++;
         // research (presolve_domcol_first_visit): a relation found is kept
         // for the later column's scan of sign -direction_k; when only
         // possible dominations count, a signature-possible pair that failed
@@ -1017,9 +1029,9 @@ HPresolve::Result HPresolve::dominatedColumns(
     // research (presolve_domcol_first_visit): scan of direction * x_col in
     // its current shortest row of that sign. Fix scans, touched columns and
     // stale signs: scan-both's scan. Otherwise the candidates are collected
-    // from the static lists; the scan is still scan-both's (every entry of
-    // the row), and the verify option counts the tests that hold for an
-    // entry that is not a candidate.
+    // from the static lists and each gets scan-both's processing of its
+    // entry in the row; the other entries are only counted (walk of the
+    // row), or, when only possible dominations count, not read at all.
     auto fvsScan = [&](HighsInt row, HighsInt col, HighsInt direction,
                        double bestVal, bool hasCliques, bool ownFix) {
       if (rowDeleted[row]) return Result::kOk;
@@ -1087,26 +1099,63 @@ HPresolve::Result HPresolve::dominatedColumns(
 
       const size_t epoch = domcolFvsTouchEpoch;
       bool stop = false;
-      // after a touch (or stale signs) the candidates no longer cover the
-      // rest of the row
-      bool fallback = false;
-      const std::vector<HighsInt>& rowpositions = positionsOf(row);
-      for (HighsInt pos : rowpositions) {
-        if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
-        HighsInt k = Acol[pos];
-        if (!fallback && (domcolFvsTouchEpoch != epoch || domcolSignsDirty)) {
-          fallback = true;
-          numFvsFallbacks++;
+      // walk the entries after column 'from' as scan-both does; after a
+      // touch (or stale signs) the rest of the row is scan-both's scan
+      auto walk = [&](HighsInt from) {
+        bool fallback = false;
+        const std::vector<HighsInt>& rowpositions = positionsOf(row);
+        for (HighsInt pos : rowpositions) {
+          if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+          HighsInt k = Acol[pos];
+          if (k <= from) continue;
+          if (!fallback &&
+              (domcolFvsTouchEpoch != epoch || domcolSignsDirty)) {
+            fallback = true;
+            numFvsFallbacks++;
+          }
+          if (fallback)
+            fvsTreat = 0;
+          else if (fvsCandStamp[k] == fvsScanId)
+            fvsTreat = fvsCandCountOnly[k];
+          else
+            fvsTreat = domcolCountPossible ? 2 : 1;
+          if (fvsTreat == 0 && k != col && !colDeleted[k]) numFvsOffered++;
+          Result result = checkEntry(row, col, pos, direction, bestVal,
+                                     hasCliques, false, stop);
+          fvsTreat = 0;
+          if (result != Result::kOk) return result;
+          if (stop) break;
         }
-        const bool cand = fallback || (fvsCandStamp[k] == fvsScanId &&
-                                       fvsCandCountOnly[k] == 0);
-        if (cand && k != col && !colDeleted[k]) numFvsOffered++;
-        fvsNonCand = fvsVerify && !cand;
+        return Result::kOk;
+      };
+      if (!domcolCountPossible || fvsVerify) return walk(HighsInt{-1});
+      // candidates only, in row order
+      std::sort(fvsList.begin(), fvsList.end());
+      for (HighsInt k : fvsList) {
+        if (colDeleted[k]) continue;
+        HighsInt pos = findNonzero(row, k);
+        if (pos == -1) continue;
+        fvsTreat = fvsCandCountOnly[k];
+        if (fvsTreat == 0) numFvsOffered++;
         Result result = checkEntry(row, col, pos, direction, bestVal,
                                    hasCliques, false, stop);
-        fvsNonCand = false;
+        fvsTreat = 0;
         if (result != Result::kOk) return result;
         if (stop) break;
+        if (domcolFvsTouchEpoch != epoch || domcolSignsDirty) {
+          // a touch: scan-both's scan of the entries after this one
+          numFvsFallbacks++;
+          const std::vector<HighsInt>& rowpositions = positionsOf(row);
+          for (HighsInt rest : rowpositions) {
+            if (Avalue[rest] == 0.0 || Arow[rest] != row || Acol[rest] <= k)
+              continue;
+            HPRESOLVE_CHECKED_CALL(checkEntry(row, col, rest, direction,
+                                              bestVal, hasCliques, false,
+                                              stop));
+            if (stop) break;
+          }
+          break;
+        }
       }
       return Result::kOk;
     };
