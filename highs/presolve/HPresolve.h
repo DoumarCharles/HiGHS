@@ -187,6 +187,13 @@ class HPresolve {
   std::vector<HighsInt> domcolFvsTouched;
   std::vector<std::vector<HighsInt>> domcolFvsExtra;
   void domcolFvsTouch(HighsInt col, HighsInt newRow);
+  // research (presolve_domcol_first_visit): row whose entries are counted
+  // in closed form by the running scan (-1: none), the columns whose entry
+  // was removed from it since, and the number of in-place coefficient
+  // changes (they do not change numMatrixLinks)
+  HighsInt domcolFvsCountRow = -1;
+  std::vector<HighsInt> domcolFvsCountRemoved;
+  size_t domcolFvsCoefEpoch = 0;
 
   enum class Result {
     kOk,

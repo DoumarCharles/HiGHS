@@ -592,6 +592,8 @@ void HPresolve::domcolFvsTouch(HighsInt col, HighsInt newRow) {
 void HPresolve::unlink(HighsInt pos) {
   if (domcolFvsTracking && !colDeleted[Acol[pos]])
     domcolFvsTouch(Acol[pos], -1);
+  if (domcolFvsTracking && Arow[pos] == domcolFvsCountRow)
+    domcolFvsCountRemoved.push_back(Acol[pos]);
   if (domcolSignTracking && !colDeleted[Acol[pos]] &&
       --domcolSignCount[2 * Acol[pos] +
                         domcolEntrySign(Arow[pos], Avalue[pos])] == 0)
@@ -1356,6 +1358,7 @@ void HPresolve::addToMatrix(const HighsInt row, const HighsInt col,
       if (domcolSignTracking && (Avalue[pos] > 0) != (sum > 0))
         domcolSignsDirty = true;
       if (domcolFvsTracking && !colDeleted[col]) domcolFvsTouch(col, -1);
+      if (domcolFvsTracking) ++domcolFvsCoefEpoch;
       Avalue[pos] = sum;
     }
   }

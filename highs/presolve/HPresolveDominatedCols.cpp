@@ -321,7 +321,42 @@ HPresolve::Result HPresolve::dominatedColumns(
   size_t numFvsFallbacks = 0;
   size_t numFvsPendingUsed = 0;
   size_t numFvsMissed = 0;
+  // closed-form count: smallest and largest |coefficient| per row (stamp =
+  // links + in-place changes; removals only narrow the range), entry
+  // positions of the candidates, scan counts
+  std::vector<double> fvsAbsMin;
+  std::vector<double> fvsAbsMax;
+  std::vector<size_t> fvsAbsStamp;
+  std::vector<HighsInt> fvsPos;
+  size_t numFvsClosedScans = 0;
+  size_t numFvsWalkScans = 0;
+  size_t numFvsClosedWalks = 0;
+  // the type counts of a row cover integer, implied integer and continuous
+  // columns only
+  bool fvsSemi = false;
+  if (fvs)
+    for (HighsInt c = 0; c < model->num_col_ && !fvsSemi; ++c)
+      fvsSemi = model->integrality_[c] == HighsVarType::kSemiContinuous ||
+                model->integrality_[c] == HighsVarType::kSemiInteger;
+  auto fvsCoefRange = [&](HighsInt row) {
+    const size_t stamp = numMatrixLinks + domcolFvsCoefEpoch;
+    if (fvsAbsStamp[row] == stamp) return;
+    double lo = kHighsInf;
+    double hi = 0.0;
+    for (const HighsSliceNonzero& nonz : getRowVector(row)) {
+      lo = std::min(lo, std::abs(nonz.value()));
+      hi = std::max(hi, std::abs(nonz.value()));
+    }
+    fvsAbsMin[row] = lo;
+    fvsAbsMax[row] = hi;
+    fvsAbsStamp[row] = stamp;
+  };
   if (fvs) {
+    fvsAbsMin.assign(model->num_row_, 0.0);
+    fvsAbsMax.assign(model->num_row_, 0.0);
+    fvsAbsStamp.assign(model->num_row_, ~size_t{0});
+    domcolFvsCountRow = -1;
+    domcolFvsCountRemoved.clear();
     const size_t numCol2 = 2 * static_cast<size_t>(model->num_col_);
     domcolSignCount.assign(numCol2, 0);
     fvsKeyLen.assign(numCol2, kHighsIInf);
@@ -1128,7 +1163,120 @@ HPresolve::Result HPresolve::dominatedColumns(
         }
         return Result::kOk;
       };
-      if (!domcolCountPossible || fvsVerify) return walk(HighsInt{-1});
+      // research (presolve_domcol_first_visit): closed-form count. The
+      // bound of col is finite and not implied and there are no cliques, so
+      // scan-both counts an entry it reaches once per kind that passes the
+      // coefficient test, when the types agree. With |a_col| <= every
+      // |coefficient| of the row (ranged row: all equal) exactly one kind
+      // passes, so the count is the number of live entries of col's type
+      // class; the row is not walked.
+      bool closed = false;
+      if (!domcolCountPossible && !fvsVerify && allowPredBndAnalysis &&
+          !hasCliques && !fvsSemi) {
+        const double bound =
+            direction > 0 ? model->col_upper_[col] : model->col_lower_[col];
+        if (direction * bound != kHighsInf &&
+            !(direction > 0 ? isUpperImplied(col) : isLowerImplied(col))) {
+          fvsCoefRange(row);
+          const double absVal = std::abs(bestVal);
+          if (isRanged(row))
+            closed = fvsAbsMin[row] == absVal && fvsAbsMax[row] == absVal &&
+                     2 * absVal > options->small_matrix_value;
+          else
+            closed = absVal <= fvsAbsMin[row] &&
+                     absVal + fvsAbsMin[row] > options->small_matrix_value &&
+                     (model->row_upper_[row] == kHighsInf ? -direction
+                                                         : direction) *
+                             bestVal >
+                         0;
+        }
+      }
+      if (closed) {
+        numFvsClosedScans++;
+        const HighsVarType type = model->integrality_[col];
+        size_t count = rowsize[row] - 1;
+        if (type == HighsVarType::kContinuous)
+          count -= rowsizeInteger[row];
+        else if (type == HighsVarType::kInteger)
+          count = rowsizeInteger[row] + rowsizeImplInt[row] - 1;
+        // the candidates in the row count themselves
+        std::sort(fvsList.begin(), fvsList.end());
+        fvsPos.clear();
+        for (HighsInt k : fvsList) {
+          HighsInt pos = findNonzero(row, k);
+          if (pos == -1) continue;
+          fvsList[fvsPos.size()] = k;
+          fvsPos.push_back(pos);
+          if (varsHaveSameType(col, k)) --count;
+        }
+        fvsList.resize(fvsPos.size());
+        numDomChecksPredBndAnalysis += count;
+        numDomChecks += count;
+        // entries after column 'from' that scan-both does not reach, or
+        // that are walked instead
+        auto uncount = [&](HighsInt from) {
+          const std::vector<HighsInt>& rowpositions = positionsOf(row);
+          for (HighsInt pos : rowpositions) {
+            if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+            HighsInt c = Acol[pos];
+            if (c <= from || c == col || colDeleted[c] ||
+                fvsCandStamp[c] == fvsScanId || !varsHaveSameType(col, c))
+              continue;
+            --numDomChecksPredBndAnalysis;
+            --numDomChecks;
+          }
+        };
+        domcolFvsCountRow = row;
+        domcolFvsCountRemoved.clear();
+        HighsInt from = -1;
+        bool walkRest = false;
+        for (size_t i = 0; i < fvsList.size(); ++i) {
+          HighsInt k = fvsList[i];
+          HighsInt pos = fvsPos[i];
+          if (colDeleted[k] || Avalue[pos] == 0.0 || Arow[pos] != row ||
+              Acol[pos] != k)
+            continue;
+          fvsTreat = fvsCandCountOnly[k];
+          if (fvsTreat == 0) numFvsOffered++;
+          Result result = checkEntry(row, col, pos, direction, bestVal,
+                                     hasCliques, false, stop);
+          fvsTreat = 0;
+          if (result != Result::kOk) {
+            domcolFvsCountRow = -1;
+            return result;
+          }
+          // entries removed before scan-both reaches them
+          for (HighsInt c : domcolFvsCountRemoved) {
+            if (c <= k || c == col || fvsCandStamp[c] == fvsScanId ||
+                !varsHaveSameType(col, c))
+              continue;
+            --numDomChecksPredBndAnalysis;
+            --numDomChecks;
+          }
+          domcolFvsCountRemoved.clear();
+          from = k;
+          if (stop) {
+            uncount(k);
+            break;
+          }
+          // a touch, stale signs, or the bound of col now implied: the
+          // remaining entries are counted differently, so walk them
+          if (domcolFvsTouchEpoch != epoch || domcolSignsDirty ||
+              (direction > 0 ? isUpperImplied(col) : isLowerImplied(col))) {
+            walkRest = true;
+            break;
+          }
+        }
+        domcolFvsCountRow = -1;
+        if (!walkRest) return Result::kOk;
+        numFvsClosedWalks++;
+        uncount(from);
+        return walk(from);
+      }
+      if (!domcolCountPossible || fvsVerify) {
+        numFvsWalkScans++;
+        return walk(HighsInt{-1});
+      }
       // candidates only, in row order
       std::sort(fvsList.begin(), fvsList.end());
       for (HighsInt k : fvsList) {
@@ -1415,7 +1563,8 @@ HPresolve::Result HPresolve::dominatedColumns(
                 "pred checks %.0f (count possible %d); pred scans %.0f fix "
                 "scans %.0f full scans %.0f fallbacks %.0f; touched %.0f "
                 "extra %.0f pending %.0f used %.0f; degraded %d verify "
-                "missed %.0f\n",
+                "missed %.0f; closed-form scans %.0f walked scans %.0f "
+                "closed-form walk fallbacks %.0f\n",
                 static_cast<double>(numFvsOffered),
                 static_cast<double>(testsKind[0] + testsKind[1] +
                                     testsKind[2] + testsKind[3]),
@@ -1429,7 +1578,10 @@ HPresolve::Result HPresolve::dominatedColumns(
                 static_cast<double>(domcolFvsNumExtra),
                 static_cast<double>(fvsPendCol.size()),
                 static_cast<double>(numFvsPendingUsed),
-                domcolSignsDirty ? 1 : 0, static_cast<double>(numFvsMissed));
+                domcolSignsDirty ? 1 : 0, static_cast<double>(numFvsMissed),
+                static_cast<double>(numFvsClosedScans),
+                static_cast<double>(numFvsWalkScans),
+                static_cast<double>(numFvsClosedWalks));
 
   return Result::kOk;
 }
