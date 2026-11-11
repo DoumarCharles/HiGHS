@@ -179,8 +179,9 @@ HPresolve::Result HPresolve::dominatedColumns(
   // row is strictly shorter (ties: the lower index scans) and no entry left
   // its mirror unscanned; a skipped row forces the mirror scans, which then
   // try both fixings of Theorem 2.
+  const bool fvs = options->presolve_domcol_first_visit;
   const bool mirrorSkip = options->presolve_domcol_mirror_skip &&
-                          !options->presolve_domcol_pair_once;
+                          !options->presolve_domcol_pair_once && !fvs;
   // sign of an entry in <= form: 1 = positive ("plus" row), 0 = negative
   auto entrySign = [&](HighsInt row, double val) -> HighsInt {
     return (model->row_upper_[row] != kHighsInf ? val : -val) > 0 ? 1 : 0;
@@ -270,11 +271,119 @@ HPresolve::Result HPresolve::dominatedColumns(
   // scan); after the switch a pair is tested by the first column whose list
   // runs. A list that did not run in full is flagged and its pairs are then
   // tested by the other side.
-  const bool pairOnce = options->presolve_domcol_pair_once;
+  const bool pairOnce = options->presolve_domcol_pair_once && !fvs;
   struct SignTrackingGuard {
     HPresolve& presolve;
-    ~SignTrackingGuard() { presolve.domcolSignTracking = false; }
+    ~SignTrackingGuard() {
+      presolve.domcolSignTracking = false;
+      presolve.domcolFvsTracking = false;
+    }
   } signTrackingGuard{*this};
+
+  // research (presolve_domcol_first_visit): a pair is tested when the first
+  // of its two columns is visited, as scan-both does, but it is listed only
+  // from the shorter of its two rows (static key = length of the column's
+  // shortest row of that sign at the start of the call, column index). The
+  // visited column reads the entries of its own key row whose mirror list is
+  // not shorter (fvsOwnF: no mirror list, fvsOwnHT: longer or equal), and,
+  // in its shorter rows of the other sign, the columns that use that row as
+  // their key row (scanners). Columns whose vector changed (touched) are
+  // offered through the extra lists; relations found are kept for the later
+  // column (pending). See FABLE_DESIGN.md.
+  const bool fvsVerify = fvs && options->presolve_domcol_fvs_verify;
+  std::vector<HighsInt> fvsKeyLen;
+  std::vector<HighsInt> fvsKeyRow;
+  std::vector<HighsInt> fvsLen0;
+  // scanners of (row, sign): CSR over 2 * row + sign, columns ascending
+  std::vector<HighsInt> fvsScanStart;
+  std::vector<HighsInt> fvsScanCol;
+  std::vector<std::vector<HighsInt>> fvsOwnF;
+  std::vector<std::vector<HighsInt>> fvsOwnHT;
+  std::vector<size_t> fvsOwnStamp;
+  // candidates of the current scan (stamp = scan id); count only = 1
+  std::vector<size_t> fvsCandStamp;
+  std::vector<uint8_t> fvsCandCountOnly;
+  std::vector<HighsInt> fvsList;
+  size_t fvsScanId = 0;
+  // pending entries per later column: earlier column, flag bit 0 = sign of
+  // the later column's scan, bit 1 = count only
+  std::vector<HighsInt> fvsPendHead;
+  std::vector<HighsInt> fvsPendNext;
+  std::vector<HighsInt> fvsPendCol;
+  std::vector<uint8_t> fvsPendFlag;
+  // verify: the entry being processed was not given by the lists
+  bool fvsNonCand = false;
+  size_t numFvsOffered = 0;
+  size_t numFvsPredScans = 0;
+  size_t numFvsFixScans = 0;
+  size_t numFvsFullScans = 0;
+  size_t numFvsFallbacks = 0;
+  size_t numFvsPendingUsed = 0;
+  size_t numFvsMissed = 0;
+  if (fvs) {
+    const size_t numCol2 = 2 * static_cast<size_t>(model->num_col_);
+    domcolSignCount.assign(numCol2, 0);
+    fvsKeyLen.assign(numCol2, kHighsIInf);
+    fvsKeyRow.assign(numCol2, -1);
+    fvsLen0.assign(rowsize.begin(), rowsize.begin() + model->num_row_);
+    fvsScanStart.assign(2 * static_cast<size_t>(model->num_row_) + 1, 0);
+    for (HighsInt c = 0; c < model->num_col_; ++c) {
+      if (colDeleted[c]) continue;
+      for (const HighsSliceNonzero& nonz : getColumnVector(c)) {
+        HighsInt q = entrySign(nonz.index(), nonz.value());
+        domcolSignCount[2 * c + q]++;
+        if (rowsize[nonz.index()] < fvsKeyLen[2 * c + q]) {
+          fvsKeyLen[2 * c + q] = rowsize[nonz.index()];
+          fvsKeyRow[2 * c + q] = nonz.index();
+        }
+      }
+      for (HighsInt q = 0; q < 2; ++q)
+        if (fvsKeyRow[2 * c + q] != -1)
+          fvsScanStart[2 * fvsKeyRow[2 * c + q] + q + 1]++;
+    }
+    for (size_t i = 1; i < fvsScanStart.size(); ++i)
+      fvsScanStart[i] += fvsScanStart[i - 1];
+    fvsScanCol.resize(fvsScanStart.back());
+    std::vector<HighsInt> fill(fvsScanStart.begin(), fvsScanStart.end() - 1);
+    for (HighsInt c = 0; c < model->num_col_; ++c)
+      for (HighsInt q = 0; q < 2; ++q)
+        if (fvsKeyRow[2 * c + q] != -1)
+          fvsScanCol[fill[2 * fvsKeyRow[2 * c + q] + q]++] = c;
+    fvsOwnF.resize(model->num_row_);
+    fvsOwnHT.resize(model->num_row_);
+    fvsOwnStamp.assign(model->num_row_, ~size_t{0});
+    fvsCandStamp.assign(model->num_col_, 0);
+    fvsCandCountOnly.assign(model->num_col_, 0);
+    fvsPendHead.assign(model->num_col_, -1);
+    domcolFvsTouched.assign(model->num_col_, -1);
+    domcolFvsExtra.clear();
+    domcolFvsExtra.resize(model->num_row_);
+    domcolFvsTouchEpoch = 0;
+    domcolFvsNumTouched = 0;
+    domcolFvsNumExtra = 0;
+    domcolFvsVisitCol = -1;
+    domcolSignsDirty = false;
+    domcolSignTracking = true;
+    domcolFvsTracking = true;
+  }
+  // owned entries of a row, by column; rebuilt after a matrix insertion
+  auto fvsOwned = [&](HighsInt row) {
+    if (fvsOwnStamp[row] == numMatrixLinks) return;
+    fvsOwnF[row].clear();
+    fvsOwnHT[row].clear();
+    getRowPositions(row, mirror_rowpositions);
+    for (HighsInt pos : mirror_rowpositions) {
+      if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+      HighsInt c = Acol[pos];
+      if (colDeleted[c]) continue;
+      HighsInt m = fvsKeyLen[2 * c + 1 - entrySign(row, Avalue[pos])];
+      if (m == kHighsIInf)
+        fvsOwnF[row].push_back(c);
+      else if (m >= fvsLen0[row])
+        fvsOwnHT[row].push_back(c);
+    }
+    fvsOwnStamp[row] = numMatrixLinks;
+  };
   // last column visited while predictive analysis was on, once it is off
   HighsInt onceSwitchCol = -1;
   // lists that left owned pairs untested, and their columns (partners
@@ -349,6 +458,9 @@ HPresolve::Result HPresolve::dominatedColumns(
   for (HighsInt j = 0; j < model->num_col_; ++j) {
     // skip deleted columns
     if (colDeleted[j]) continue;
+
+    // research (presolve_domcol_first_visit)
+    if (fvs) domcolFvsVisitCol = j;
 
     // increment counter for number of columns
     numCols++;
@@ -585,6 +697,23 @@ HPresolve::Result HPresolve::dominatedColumns(
                   tightenBounds(k, dominatedBound, direction_k < 0, col,
                                 dominatingBound, direction * direction_k));
           }
+        }
+        // research (presolve_domcol_fvs_verify): a test of scan-both
+        // that holds for a pair the lists did not give
+        if (fvsNonCand && dominated) numFvsMissed++;
+        // research (presolve_domcol_first_visit): a relation found is kept
+        // for the later column's scan of sign -direction_k; when only
+        // possible dominations count, a signature-possible pair that failed
+        // is kept too, to be counted there (no test)
+        if (fvs && k > col && !colDeleted[col] && !colDeleted[k] &&
+            (dominated ||
+             (domcolCountPossible &&
+              checkSignatures(direction, col, direction_k, k)))) {
+          fvsPendCol.push_back(col);
+          fvsPendFlag.push_back(static_cast<uint8_t>(
+              (direction_k > 0 ? 0 : 1) | (dominated ? 0 : 2)));
+          fvsPendNext.push_back(fvsPendHead[k]);
+          fvsPendHead[k] = static_cast<HighsInt>(fvsPendCol.size()) - 1;
         }
       }
       return Result::kOk;
@@ -885,6 +1014,103 @@ HPresolve::Result HPresolve::dominatedColumns(
       return Result::kOk;
     };
 
+    // research (presolve_domcol_first_visit): scan of direction * x_col in
+    // its current shortest row of that sign. Fix scans, touched columns and
+    // stale signs: scan-both's scan. Otherwise the candidates are collected
+    // from the static lists; the scan is still scan-both's (every entry of
+    // the row), and the verify option counts the tests that hold for an
+    // entry that is not a candidate.
+    auto fvsScan = [&](HighsInt row, HighsInt col, HighsInt direction,
+                       double bestVal, bool hasCliques, bool ownFix) {
+      if (rowDeleted[row]) return Result::kOk;
+      const HighsInt q = direction > 0 ? 1 : 0;
+      const HighsInt keyRow = fvsKeyRow[2 * col + q];
+      if (ownFix || domcolSignsDirty || domcolFvsTouched[col] >= 0 ||
+          keyRow == -1) {
+        if (ownFix)
+          numFvsFixScans++;
+        else
+          numFvsFullScans++;
+        return checkRow(row, col, direction, bestVal, hasCliques, false);
+      }
+      numFvsPredScans++;
+      ++fvsScanId;
+      fvsList.clear();
+      auto addCand = [&](HighsInt c, bool countOnly) {
+        if (c == col || colDeleted[c]) return;
+        if (fvsCandStamp[c] != fvsScanId) {
+          fvsCandStamp[c] = fvsScanId;
+          fvsCandCountOnly[c] = countOnly ? 1 : 0;
+          fvsList.push_back(c);
+        } else if (!countOnly) {
+          fvsCandCountOnly[c] = 0;
+        }
+      };
+      // own list: entries without a mirror list, and the later columns
+      // whose mirror list is not shorter
+      fvsOwned(keyRow);
+      for (HighsInt c : fvsOwnF[keyRow]) addCand(c, false);
+      const std::vector<HighsInt>& ownHT = fvsOwnHT[keyRow];
+      for (auto it = std::upper_bound(ownHT.begin(), ownHT.end(), col);
+           it != ownHT.end(); ++it)
+        addCand(*it, false);
+      // shorter rows of the other sign: the later columns listing there
+      // FVS TODO: filter a scanner in its own row first (live, sign, kind).
+      // Not built: when only possible dominations count, the counter is the
+      // tests made, so a filter there changes the switch time; exact only
+      // with the walk or the closed-form count below.
+      for (const HighsSliceNonzero& nonz : getColumnVector(col)) {
+        HighsInt r = nonz.index();
+        if (entrySign(r, nonz.value()) == q ||
+            fvsLen0[r] >= fvsKeyLen[2 * col + q])
+          continue;
+        const HighsInt* first = fvsScanCol.data() + fvsScanStart[2 * r];
+        const HighsInt* mid = fvsScanCol.data() + fvsScanStart[2 * r + 1];
+        const HighsInt* last = fvsScanCol.data() + fvsScanStart[2 * r + 2];
+        for (const HighsInt* it = std::upper_bound(first, mid, col); it != mid;
+             ++it)
+          addCand(*it, false);
+        for (const HighsInt* it = std::upper_bound(mid, last, col);
+             it != last; ++it)
+          addCand(*it, false);
+      }
+      // touched columns: later ones, and earlier ones changed since their
+      // own visit
+      for (HighsInt c : domcolFvsExtra[keyRow])
+        if (c > col || domcolFvsTouched[c] >= c) addCand(c, false);
+      // relations found by earlier columns
+      for (HighsInt p = fvsPendHead[col]; p != -1; p = fvsPendNext[p]) {
+        if ((fvsPendFlag[p] & 1) != q) continue;
+        numFvsPendingUsed++;
+        addCand(fvsPendCol[p], (fvsPendFlag[p] & 2) != 0);
+      }
+
+      const size_t epoch = domcolFvsTouchEpoch;
+      bool stop = false;
+      // after a touch (or stale signs) the candidates no longer cover the
+      // rest of the row
+      bool fallback = false;
+      const std::vector<HighsInt>& rowpositions = positionsOf(row);
+      for (HighsInt pos : rowpositions) {
+        if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+        HighsInt k = Acol[pos];
+        if (!fallback && (domcolFvsTouchEpoch != epoch || domcolSignsDirty)) {
+          fallback = true;
+          numFvsFallbacks++;
+        }
+        const bool cand = fallback || (fvsCandStamp[k] == fvsScanId &&
+                                       fvsCandCountOnly[k] == 0);
+        if (cand && k != col && !colDeleted[k]) numFvsOffered++;
+        fvsNonCand = fvsVerify && !cand;
+        Result result = checkEntry(row, col, pos, direction, bestVal,
+                                   hasCliques, false, stop);
+        fvsNonCand = false;
+        if (result != Result::kOk) return result;
+        if (stop) break;
+      }
+      return Result::kOk;
+    };
+
     // check if bounds are implied or there are cliques
     bool lowerImplied = isLowerImplied(j);
     bool upperImplied = isUpperImplied(j);
@@ -893,7 +1119,28 @@ HPresolve::Result HPresolve::dominatedColumns(
     bool hasPosCliques =
         isBinary(j) && mipsolver->mipdata_->cliquetable.numCliques(j, 1) > 0;
 
-    if (pairOnce) {
+    if (fvs) {
+      // research (presolve_domcol_first_visit): the two scans of scan-both,
+      // in its order, with its conditions
+      if (bestRowMinus != -1 &&
+          (allowPredBndAnalysis || lowerImplied || hasNegCliques)) {
+        size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
+        HPRESOLVE_CHECKED_CALL(fvsScan(bestRowMinus, j, HighsInt{-1},
+                                       ajBestRowMinus, hasNegCliques,
+                                       lowerImplied || hasNegCliques));
+        pairsDir[0] += numPairs - p0;
+        redsDir[0] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
+      }
+      if (!colDeleted[j] && bestRowPlus != -1 &&
+          (allowPredBndAnalysis || upperImplied || hasPosCliques)) {
+        size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
+        HPRESOLVE_CHECKED_CALL(fvsScan(bestRowPlus, j, HighsInt{1},
+                                       ajBestRowPlus, hasPosCliques,
+                                       upperImplied || hasPosCliques));
+        pairsDir[1] += numPairs - p0;
+        redsDir[1] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
+      }
+    } else if (pairOnce) {
       // research (presolve_domcol_pair_once): direction -1 (minus row) then
       // +1, as below; a list that did not run in full is flagged, and the
       // partners then test those pairs themselves
@@ -1112,6 +1359,28 @@ HPresolve::Result HPresolve::dominatedColumns(
               static_cast<int>(onceSwitchCol), domcolSignsDirty ? 1 : 0,
               static_cast<double>(numOnceWhy[0]),
               static_cast<double>(numOnceWhy[1]));
+  // research (presolve_domcol_first_visit)
+  if (fvs)
+    highsLogDev(options->log_options, HighsLogType::kVerbose,
+                "Dominated columns first visit: offered %.0f tests %.0f "
+                "pred checks %.0f (count possible %d); pred scans %.0f fix "
+                "scans %.0f full scans %.0f fallbacks %.0f; touched %.0f "
+                "extra %.0f pending %.0f used %.0f; degraded %d verify "
+                "missed %.0f\n",
+                static_cast<double>(numFvsOffered),
+                static_cast<double>(testsKind[0] + testsKind[1] +
+                                    testsKind[2] + testsKind[3]),
+                static_cast<double>(numDomChecksPredBndAnalysis),
+                domcolCountPossible ? 1 : 0,
+                static_cast<double>(numFvsPredScans),
+                static_cast<double>(numFvsFixScans),
+                static_cast<double>(numFvsFullScans),
+                static_cast<double>(numFvsFallbacks),
+                static_cast<double>(domcolFvsNumTouched),
+                static_cast<double>(domcolFvsNumExtra),
+                static_cast<double>(fvsPendCol.size()),
+                static_cast<double>(numFvsPendingUsed),
+                domcolSignsDirty ? 1 : 0, static_cast<double>(numFvsMissed));
 
   return Result::kOk;
 }

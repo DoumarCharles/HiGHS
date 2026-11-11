@@ -472,6 +472,8 @@ struct HighsOptionsStruct {
   bool presolve_cover_trigger;
   bool presolve_domcol_mirror_skip;
   bool presolve_domcol_pair_once;
+  bool presolve_domcol_first_visit;
+  bool presolve_domcol_fvs_verify;
   bool presolve_remove_slacks;
   bool presolve_fm_obj_reformulation;
   bool no_unnecessary_rebuild_refactor;
@@ -658,6 +660,8 @@ struct HighsOptionsStruct {
         presolve_cover_trigger(false),
         presolve_domcol_mirror_skip(false),
         presolve_domcol_pair_once(false),
+        presolve_domcol_first_visit(false),
+        presolve_domcol_fvs_verify(false),
         presolve_remove_slacks(false),
         presolve_fm_obj_reformulation(false),
         no_unnecessary_rebuild_refactor(false),
@@ -1788,6 +1792,24 @@ class HighsOptions : public HighsOptionsStruct {
         "sign. Overrides presolve_domcol_mirror_skip. Changes the search "
         "(research)",
         advanced, &presolve_domcol_pair_once, false);
+    records.push_back(record_bool);
+
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_first_visit",
+        "Dominated columns test each pair when the first of its two columns "
+        "is visited, as the default does, but list it only from the shorter "
+        "of its two rows (static lengths); pairs that cannot hold are not "
+        "tested. Overrides presolve_domcol_pair_once and "
+        "presolve_domcol_mirror_skip (research)",
+        advanced, &presolve_domcol_first_visit, false);
+    records.push_back(record_bool);
+
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_fvs_verify",
+        "With presolve_domcol_first_visit: also test every pair that was not "
+        "offered and count those that hold (dev log); the run is unchanged "
+        "(research)",
+        advanced, &presolve_domcol_fvs_verify, false);
     records.push_back(record_bool);
 
     record_bool =
