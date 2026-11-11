@@ -331,6 +331,7 @@ HPresolve::Result HPresolve::dominatedColumns(
   size_t numFvsClosedScans = 0;
   size_t numFvsWalkScans = 0;
   size_t numFvsClosedWalks = 0;
+  size_t numFvsRowScans = 0;
   // the type counts of a row cover integer, implied integer and continuous
   // columns only
   bool fvsSemi = false;
@@ -1080,6 +1081,37 @@ HPresolve::Result HPresolve::dominatedColumns(
           numFvsFullScans++;
         return checkRow(row, col, direction, bestVal, hasCliques, false);
       }
+      // research (presolve_domcol_first_visit): the lists against the row,
+      // before collecting. Each list entry counted here is read once by the
+      // collection below (its duplicates too), scan-both reads the
+      // rowsize - 1 other entries of the row and tests no more than those.
+      // When the lists are not shorter, scan-both's scan is the cheaper of
+      // the two and it is run: the tests that hold and the counter are the
+      // same (verify: the lists are always used).
+      if (!fvsVerify) {
+        fvsOwned(keyRow);
+        const std::vector<HighsInt>& own = fvsOwnHT[keyRow];
+        const size_t limit = static_cast<size_t>(rowsize[row]) - 1;
+        size_t listed =
+            fvsOwnF[keyRow].size() + domcolFvsExtra[keyRow].size() +
+            (own.end() - std::upper_bound(own.begin(), own.end(), col));
+        for (const HighsSliceNonzero& nonz : getColumnVector(col)) {
+          if (listed >= limit) break;
+          HighsInt r = nonz.index();
+          if (entrySign(r, nonz.value()) == q ||
+              fvsLen0[r] >= fvsKeyLen[2 * col + q])
+            continue;
+          const HighsInt* first = fvsScanCol.data() + fvsScanStart[2 * r];
+          const HighsInt* mid = fvsScanCol.data() + fvsScanStart[2 * r + 1];
+          const HighsInt* last = fvsScanCol.data() + fvsScanStart[2 * r + 2];
+          listed += (mid - std::upper_bound(first, mid, col)) +
+                    (last - std::upper_bound(mid, last, col));
+        }
+        if (listed >= limit) {
+          numFvsRowScans++;
+          return checkRow(row, col, direction, bestVal, hasCliques, false);
+        }
+      }
       numFvsPredScans++;
       ++fvsScanId;
       fvsList.clear();
@@ -1564,7 +1596,7 @@ HPresolve::Result HPresolve::dominatedColumns(
                 "scans %.0f full scans %.0f fallbacks %.0f; touched %.0f "
                 "extra %.0f pending %.0f used %.0f; degraded %d verify "
                 "missed %.0f; closed-form scans %.0f walked scans %.0f "
-                "closed-form walk fallbacks %.0f\n",
+                "closed-form walk fallbacks %.0f row-cost scans %.0f\n",
                 static_cast<double>(numFvsOffered),
                 static_cast<double>(testsKind[0] + testsKind[1] +
                                     testsKind[2] + testsKind[3]),
@@ -1581,7 +1613,8 @@ HPresolve::Result HPresolve::dominatedColumns(
                 domcolSignsDirty ? 1 : 0, static_cast<double>(numFvsMissed),
                 static_cast<double>(numFvsClosedScans),
                 static_cast<double>(numFvsWalkScans),
-                static_cast<double>(numFvsClosedWalks));
+                static_cast<double>(numFvsClosedWalks),
+                static_cast<double>(numFvsRowScans));
 
   return Result::kOk;
 }
