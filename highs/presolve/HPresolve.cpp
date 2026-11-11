@@ -534,6 +534,7 @@ void HPresolve::chooseRules() {
 }
 
 void HPresolve::link(HighsInt pos) {
+  ++numMatrixLinks;
   Anext[pos] = colhead[Acol[pos]];
   Aprev[pos] = -1;
   colhead[Acol[pos]] = pos;

@@ -150,6 +150,11 @@ class HPresolve {
   HighsInt oldNumRow;
   bool probingEarlyAbort;
 
+  // research (presolve_domcol_row_cache): number of entries linked into the
+  // matrix so far; row positions collected earlier stay complete while it is
+  // unchanged (deleted entries are recognised by the reader)
+  size_t numMatrixLinks = 0;
+
   enum class Result {
     kOk,
     kPrimalInfeasible,
@@ -467,6 +472,9 @@ class HPresolve {
   Result liftingForProbing(HighsPostsolveStack& postsolve_stack);
 
   Result dominatedColumns(HighsPostsolveStack& postsolve_stack);
+
+  // research (presolve_cover_subsumption)
+  Result coverSubsumption(HighsPostsolveStack& postsolve_stack);
 
   Result doubletonEq(HighsPostsolveStack& postsolve_stack, HighsInt row,
                      HighsPostsolveStack::RowType rowType);

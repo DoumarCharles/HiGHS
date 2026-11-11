@@ -35,6 +35,9 @@ HPresolve::Result HPresolve::dominatedColumns(
   // for predictive bound analysis
   size_t numDomChecks = 0;
   size_t numDomChecksPredBndAnalysis = 0;
+  // research (measurement only, dev log): pairs offered / past the skips
+  size_t numPairs = 0;
+  size_t numPairsChecked = 0;
 
   auto addSignature = [&](HighsInt row, HighsInt col, uint32_t rowLowerFinite,
                           uint32_t rowUpperFinite) {
@@ -153,6 +156,17 @@ HPresolve::Result HPresolve::dominatedColumns(
   // perform predictive bound analysis?
   bool allowPredBndAnalysis = true;
   std::vector<HighsInt> check_rowpositions;
+
+  // research (presolve_domcol_row_cache): row positions collected by
+  // checkRow, reused until an entry is inserted into the matrix (fixings only
+  // delete entries, which checkRow skips)
+  const bool rowCache = options->presolve_domcol_row_cache;
+  std::vector<std::vector<HighsInt>> cache_rowpositions;
+  std::vector<size_t> cache_rowstamp;
+  if (rowCache) {
+    cache_rowpositions.resize(model->num_row_);
+    cache_rowstamp.assign(model->num_row_, ~size_t{0});
+  }
 
   for (HighsInt j = 0; j < model->num_col_; ++j) {
     // skip deleted columns
@@ -358,8 +372,17 @@ HPresolve::Result HPresolve::dominatedColumns(
     auto checkRow = [&](HighsInt row, HighsInt col, HighsInt direction,
                         double bestVal, bool hasCliques) {
       if (rowDeleted[row]) return Result::kOk;
-      getRowPositions(row, check_rowpositions);
-      for (HighsInt pos : check_rowpositions) {
+      std::vector<HighsInt>* rowpositions = &check_rowpositions;
+      if (rowCache) {
+        rowpositions = &cache_rowpositions[row];
+        if (cache_rowstamp[row] != numMatrixLinks) {
+          getRowPositions(row, *rowpositions);
+          cache_rowstamp[row] = numMatrixLinks;
+        }
+      } else {
+        getRowPositions(row, check_rowpositions);
+      }
+      for (HighsInt pos : *rowpositions) {
         if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
 
         // get column index
@@ -367,6 +390,7 @@ HPresolve::Result HPresolve::dominatedColumns(
 
         // skip column 'col' and deleted columns
         if (k == col || colDeleted[k]) continue;
+        numPairs++;
 
         // research (presolve_domcol_count_possible): skip pairs whose
         // signatures rule out domination in both directions, so they do not
@@ -375,6 +399,21 @@ HPresolve::Result HPresolve::dominatedColumns(
             !checkSignatures(direction, col, direction, k) &&
             !checkSignatures(direction, col, -direction, k))
           continue;
+
+        // research (presolve_domcol_signature_first): same skip, but only
+        // when the pair would not count as predictive bound analysis work
+        // anyway (analysis off, or a fixing possible), so the result is
+        // unchanged
+        if (options->presolve_domcol_signature_first &&
+            !checkSignatures(direction, col, direction, k) &&
+            !checkSignatures(direction, col, -direction, k) &&
+            (!allowPredBndAnalysis ||
+             ((hasCliques ||
+               (direction > 0 ? isUpperImplied(col) : isLowerImplied(col))) &&
+              model->col_lower_[k] != -kHighsInf &&
+              model->col_upper_[k] != kHighsInf)))
+          continue;
+        numPairsChecked++;
 
         // get coefficient
         double ak = Avalue[pos];
@@ -451,6 +490,13 @@ HPresolve::Result HPresolve::dominatedColumns(
                 "Fixed %d dominated columns and strengthened %d bounds\n",
                 static_cast<int>(numFixedCols),
                 static_cast<int>(numModifiedBndsPredBndAnalysis));
+  highsLogDev(options->log_options, HighsLogType::kVerbose,
+              "Dominated columns: %d columns, %.0f pairs, %.0f checked, %.0f "
+              "domination tests, predictive analysis %s\n",
+              static_cast<int>(numCols), static_cast<double>(numPairs),
+              static_cast<double>(numPairsChecked),
+              static_cast<double>(numDomChecks),
+              allowPredBndAnalysis ? "on" : "off");
 
   return Result::kOk;
 }

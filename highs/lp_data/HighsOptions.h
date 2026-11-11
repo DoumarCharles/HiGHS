@@ -464,6 +464,8 @@ struct HighsOptionsStruct {
   HighsInt presolve_rule_test;
   bool presolve_rule_logging;
   bool presolve_domcol_count_possible;
+  bool presolve_domcol_signature_first;
+  bool presolve_domcol_row_cache;
   bool presolve_remove_slacks;
   bool presolve_fm_obj_reformulation;
   bool no_unnecessary_rebuild_refactor;
@@ -642,6 +644,8 @@ struct HighsOptionsStruct {
         presolve_rule_test(0),
         presolve_rule_logging(false),
         presolve_domcol_count_possible(false),
+        presolve_domcol_signature_first(false),
+        presolve_domcol_row_cache(false),
         presolve_remove_slacks(false),
         presolve_fm_obj_reformulation(false),
         no_unnecessary_rebuild_refactor(false),
@@ -1704,6 +1708,23 @@ class HighsOptions : public HighsOptionsStruct {
         "predictive bound analysis off (upstream issue 3586). Changes the "
         "search (research)",
         advanced, &presolve_domcol_count_possible, false);
+    records.push_back(record_bool);
+
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_signature_first",
+        "Dominated columns test the row signatures of a pair first and skip "
+        "it when they rule out domination and the pair would not count "
+        "towards the predictive bound analysis limit. Same result, faster "
+        "(research)",
+        advanced, &presolve_domcol_signature_first, false);
+    records.push_back(record_bool);
+
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_row_cache",
+        "Dominated columns reuse the row positions of a row until the next "
+        "fixing or bound change (upstream issue 3583). Same result, faster "
+        "(research)",
+        advanced, &presolve_domcol_row_cache, false);
     records.push_back(record_bool);
 
     record_bool =
