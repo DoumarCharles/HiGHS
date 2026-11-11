@@ -1774,7 +1774,6 @@ class HighsOptions : public HighsOptionsStruct {
         advanced, &presolve_cover_trigger, false);
     records.push_back(record_bool);
 
-
     record_bool = new OptionRecordBool(
         "presolve_domcol_mirror_skip",
         "Dominated columns skip the scan of a row when every pair in it is "

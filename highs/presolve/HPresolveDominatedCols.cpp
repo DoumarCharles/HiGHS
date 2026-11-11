@@ -488,8 +488,7 @@ HPresolve::Result HPresolve::dominatedColumns(
   // -z ≻ -y counted once)
   size_t testsKind[4] = {0, 0, 0, 0};
   size_t foundKind[4] = {0, 0, 0, 0};
-  const bool countDistinct =
-      options->log_dev_level >= kHighsLogDevLevelVerbose;
+  const bool countDistinct = options->log_dev_level >= kHighsLogDevLevelVerbose;
   std::unordered_set<uint64_t> distinctFound;
 
   for (HighsInt j = 0; j < model->num_col_; ++j) {
@@ -672,8 +671,7 @@ HPresolve::Result HPresolve::dominatedColumns(
           if (fvsTreat == 1 && !tryToFix) numDomChecksPredBndAnalysis++;
           if (fvsVerify) {
             const size_t checks = numDomChecks;
-            if (checkDomination(direction, col, direction_k, k))
-              numFvsMissed++;
+            if (checkDomination(direction, col, direction_k, k)) numFvsMissed++;
             if (fvsTreat == 2) numDomChecks = checks;
           } else if (fvsTreat == 1) {
             numDomChecks++;
@@ -687,7 +685,8 @@ HPresolve::Result HPresolve::dominatedColumns(
         if (!tryToFix && (pairOnce || !tryToFixCol))
           numDomChecksPredBndAnalysis++;
         // check for domination
-        const HighsInt kind = (direction > 0 ? 2 : 0) + (direction_k > 0 ? 1 : 0);
+        const HighsInt kind =
+            (direction > 0 ? 2 : 0) + (direction_k > 0 ? 1 : 0);
         testsKind[kind]++;
         bool dominated = checkDomination(direction, col, direction_k, k);
         if (dominated) {
@@ -754,12 +753,11 @@ HPresolve::Result HPresolve::dominatedColumns(
         // possible dominations count, a signature-possible pair that failed
         // is kept too, to be counted there (no test)
         if (fvs && k > col && !colDeleted[col] && !colDeleted[k] &&
-            (dominated ||
-             (domcolCountPossible &&
-              checkSignatures(direction, col, direction_k, k)))) {
+            (dominated || (domcolCountPossible &&
+                           checkSignatures(direction, col, direction_k, k)))) {
           fvsPendCol.push_back(col);
-          fvsPendFlag.push_back(static_cast<uint8_t>(
-              (direction_k > 0 ? 0 : 1) | (dominated ? 0 : 2)));
+          fvsPendFlag.push_back(static_cast<uint8_t>((direction_k > 0 ? 0 : 1) |
+                                                     (dominated ? 0 : 2)));
           fvsPendNext.push_back(fvsPendHead[k]);
           fvsPendHead[k] = static_cast<HighsInt>(fvsPendCol.size()) - 1;
         }
@@ -832,8 +830,9 @@ HPresolve::Result HPresolve::dominatedColumns(
       bool boundImplied =
           direction > 0 ? isUpperImplied(col) : isLowerImplied(col);
       bool kImplied = dirK > 0 ? isLowerImplied(k) : isUpperImplied(k);
-      bool kCliques = isBinary(k) && mipsolver->mipdata_->cliquetable.numCliques(
-                                         k, dirK > 0 ? 0 : 1) > 0;
+      bool kCliques =
+          isBinary(k) &&
+          mipsolver->mipdata_->cliquetable.numCliques(k, dirK > 0 ? 0 : 1) > 0;
       if (!boundImplied && !hasCliques && !sameVarType && !kImplied &&
           !kCliques)
         return Result::kOk;
@@ -922,8 +921,8 @@ HPresolve::Result HPresolve::dominatedColumns(
       ++onceListId;
       const HighsInt q = direction > 0 ? 1 : 0;
       while (true) {
-        HPRESOLVE_CHECKED_CALL(listInRow(row, col, direction, aj, hasCliques,
-                                         forced, complete));
+        HPRESOLVE_CHECKED_CALL(
+            listInRow(row, col, direction, aj, hasCliques, forced, complete));
         if (complete || colDeleted[col]) return Result::kOk;
         row = -1;
         HighsInt rowLen = kHighsIInf;
@@ -1002,9 +1001,8 @@ HPresolve::Result HPresolve::dominatedColumns(
         bool kCliques = false;
         if (twoWay) {
           kImplied = direction > 0 ? isLowerImplied(k) : isUpperImplied(k);
-          kCliques = isBinary(k) &&
-                     mipsolver->mipdata_->cliquetable.numCliques(
-                         k, direction > 0 ? 0 : 1) > 0;
+          kCliques = isBinary(k) && mipsolver->mipdata_->cliquetable.numCliques(
+                                        k, direction > 0 ? 0 : 1) > 0;
         }
 
         // skip checks if nothing to do
@@ -1016,20 +1014,18 @@ HPresolve::Result HPresolve::dominatedColumns(
         // check already known non-zeros in respective columns in advance to
         // avoid (potentially slow) element-wise comparison if possible.
         if (checkDominationNonZero(row, direction * bestVal, direction * ak)) {
-          HPRESOLVE_CHECKED_CALL(checkCols(row, col, k, direction, HighsInt{1},
-                                           boundImplied, hasCliques,
-                                           sameVarType, twoWay, relied,
-                                           kImplied, kCliques));
+          HPRESOLVE_CHECKED_CALL(checkCols(
+              row, col, k, direction, HighsInt{1}, boundImplied, hasCliques,
+              sameVarType, twoWay, relied, kImplied, kCliques));
           if (colDeleted[col] || rowDeleted[row]) break;
         }
 
         if (!reliedOnly && !colDeleted[k] && Avalue[pos] != 0.0 &&
             Arow[pos] == row &&
             checkDominationNonZero(row, direction * bestVal, -direction * ak)) {
-          HPRESOLVE_CHECKED_CALL(checkCols(row, col, k, direction, HighsInt{-1},
-                                           boundImplied, hasCliques,
-                                           sameVarType, false, false, false,
-                                           false));
+          HPRESOLVE_CHECKED_CALL(
+              checkCols(row, col, k, direction, HighsInt{-1}, boundImplied,
+                        hasCliques, sameVarType, false, false, false, false));
           if (colDeleted[col] || rowDeleted[row]) break;
         }
       } while (false);
@@ -1149,8 +1145,8 @@ HPresolve::Result HPresolve::dominatedColumns(
         for (const HighsInt* it = std::upper_bound(first, mid, col); it != mid;
              ++it)
           addCand(*it, false);
-        for (const HighsInt* it = std::upper_bound(mid, last, col);
-             it != last; ++it)
+        for (const HighsInt* it = std::upper_bound(mid, last, col); it != last;
+             ++it)
           addCand(*it, false);
       }
       // touched columns: later ones, and earlier ones changed since their
@@ -1175,8 +1171,7 @@ HPresolve::Result HPresolve::dominatedColumns(
           if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
           HighsInt k = Acol[pos];
           if (k <= from) continue;
-          if (!fallback &&
-              (domcolFvsTouchEpoch != epoch || domcolSignsDirty)) {
+          if (!fallback && (domcolFvsTouchEpoch != epoch || domcolSignsDirty)) {
             fallback = true;
             numFvsFallbacks++;
           }
@@ -1215,12 +1210,12 @@ HPresolve::Result HPresolve::dominatedColumns(
             closed = fvsAbsMin[row] == absVal && fvsAbsMax[row] == absVal &&
                      2 * absVal > options->small_matrix_value;
           else
-            closed = absVal <= fvsAbsMin[row] &&
-                     absVal + fvsAbsMin[row] > options->small_matrix_value &&
-                     (model->row_upper_[row] == kHighsInf ? -direction
-                                                         : direction) *
-                             bestVal >
-                         0;
+            closed =
+                absVal <= fvsAbsMin[row] &&
+                absVal + fvsAbsMin[row] > options->small_matrix_value &&
+                (model->row_upper_[row] == kHighsInf ? -direction : direction) *
+                        bestVal >
+                    0;
         }
       }
       if (closed) {
@@ -1329,9 +1324,8 @@ HPresolve::Result HPresolve::dominatedColumns(
           for (HighsInt rest : rowpositions) {
             if (Avalue[rest] == 0.0 || Arow[rest] != row || Acol[rest] <= k)
               continue;
-            HPRESOLVE_CHECKED_CALL(checkEntry(row, col, rest, direction,
-                                              bestVal, hasCliques, false,
-                                              stop));
+            HPRESOLVE_CHECKED_CALL(checkEntry(
+                row, col, rest, direction, bestVal, hasCliques, false, stop));
             if (stop) break;
           }
           break;
@@ -1353,7 +1347,8 @@ HPresolve::Result HPresolve::dominatedColumns(
       // in its order, with its conditions
       if (bestRowMinus != -1 &&
           (allowPredBndAnalysis || lowerImplied || hasNegCliques)) {
-        size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
+        size_t p0 = numPairs,
+               r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
         HPRESOLVE_CHECKED_CALL(fvsScan(bestRowMinus, j, HighsInt{-1},
                                        ajBestRowMinus, hasNegCliques,
                                        lowerImplied || hasNegCliques));
@@ -1362,7 +1357,8 @@ HPresolve::Result HPresolve::dominatedColumns(
       }
       if (!colDeleted[j] && bestRowPlus != -1 &&
           (allowPredBndAnalysis || upperImplied || hasPosCliques)) {
-        size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
+        size_t p0 = numPairs,
+               r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
         HPRESOLVE_CHECKED_CALL(fvsScan(bestRowPlus, j, HighsInt{1},
                                        ajBestRowPlus, hasPosCliques,
                                        upperImplied || hasPosCliques));
@@ -1406,88 +1402,90 @@ HPresolve::Result HPresolve::dominatedColumns(
       }
       if (!colDeleted[j]) scanFlags[j] = onceFlags;
     } else {
-    // which scan to run for row 'row' of sign q (0 minus, 1 plus):
-    // 0 = none, 1 = full, 2 = only the pairs whose other column relied on it
-    uint8_t flags = 0;
-    // ownFix: this column's fixing in this direction is possible (bound
-    // implied or cliques); its scan then lists a conclusion its mirror does
-    // not, so it is not skipped
-    auto scanMode = [&](HighsInt row, HighsInt q, bool useRow,
-                        bool ownFix) -> HighsInt {
-      if (!mirrorSkip) return useRow ? 1 : 0;
-      mirrorStats(row);
-      if (useRow && mirrorRows[row].skipped[q] == 0 &&
-          mirrorBlockerDeleted(row, q)) {
-        mirrorRows[row].stamp = ~size_t{0};
-        numMirrorRecomputed++;
-      }
-      const MirrorRowStats& st = mirrorStats(row);
-      if (st.skipped[q] > 0) {
-        if (!useRow) numMirrorForced++;
-        return useRow ? 1 : 2;
-      }
-      if (!useRow) return 0;
-      if (!ownFix && st.count[1 - q] == 0 && st.notScanned[q] == 0 &&
-          (st.maxMirror[q] < rowsize[row] ||
-           (st.maxMirror[q] == rowsize[row] && st.maxMirrorCol[q] < j))) {
-        flags |= static_cast<uint8_t>(4 << q);
-        numMirrorSkipped[q]++;
-        return 0;
-      }
-      return 1;
-    };
-
-    // use row 'bestRowMinus'
-    HighsInt modeMinus =
-        bestRowMinus == -1
-            ? 0
-            : scanMode(bestRowMinus, 0,
-                       allowPredBndAnalysis || lowerImplied || hasNegCliques,
-                       lowerImplied || hasNegCliques);
-    if (modeMinus != 0) {
-      size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
-      HPRESOLVE_CHECKED_CALL(checkRow(bestRowMinus, j, HighsInt{-1},
-                                      ajBestRowMinus, hasNegCliques,
-                                      modeMinus == 2));
-      pairsDir[0] += numPairs - p0;
-      redsDir[0] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
-    }
-    if (modeMinus != 1 || rowDeleted[bestRowMinus]) flags |= 1;
-
-    // use row 'bestRowPlus'
-    HighsInt modePlus =
-        colDeleted[j] || bestRowPlus == -1
-            ? 0
-            : scanMode(bestRowPlus, 1,
-                       allowPredBndAnalysis || upperImplied || hasPosCliques,
-                       upperImplied || hasPosCliques);
-    if (modePlus != 0) {
-      size_t p0 = numPairs, r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
-      HPRESOLVE_CHECKED_CALL(checkRow(bestRowPlus, j, HighsInt{1},
-                                      ajBestRowPlus, hasPosCliques,
-                                      modePlus == 2));
-      pairsDir[1] += numPairs - p0;
-      redsDir[1] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
-    }
-    if (modePlus != 1 || rowDeleted[bestRowPlus]) flags |= 2;
-
-    // research (presolve_domcol_mirror_skip): record what this column
-    // scanned; rows with current statistics are updated here, the others
-    // read the flags when recomputed
-    if (mirrorSkip && !colDeleted[j]) {
-      scanFlags[j] = flags;
-      for (const HighsSliceNonzero& nonz : getColumnVector(j)) {
-        HighsInt row = nonz.index();
-        MirrorRowStats& st = mirrorRows[row];
-        if (st.stamp != numMatrixLinks) continue;
-        HighsInt q = entrySign(row, nonz.value());
-        if (flags & (1 << (1 - q))) {
-          st.notScanned[q]++;
-          st.notScannedCol[q] = j;
+      // which scan to run for row 'row' of sign q (0 minus, 1 plus):
+      // 0 = none, 1 = full, 2 = only the pairs whose other column relied on it
+      uint8_t flags = 0;
+      // ownFix: this column's fixing in this direction is possible (bound
+      // implied or cliques); its scan then lists a conclusion its mirror does
+      // not, so it is not skipped
+      auto scanMode = [&](HighsInt row, HighsInt q, bool useRow,
+                          bool ownFix) -> HighsInt {
+        if (!mirrorSkip) return useRow ? 1 : 0;
+        mirrorStats(row);
+        if (useRow && mirrorRows[row].skipped[q] == 0 &&
+            mirrorBlockerDeleted(row, q)) {
+          mirrorRows[row].stamp = ~size_t{0};
+          numMirrorRecomputed++;
         }
-        if (flags & (4 << (1 - q))) st.skipped[q]++;
+        const MirrorRowStats& st = mirrorStats(row);
+        if (st.skipped[q] > 0) {
+          if (!useRow) numMirrorForced++;
+          return useRow ? 1 : 2;
+        }
+        if (!useRow) return 0;
+        if (!ownFix && st.count[1 - q] == 0 && st.notScanned[q] == 0 &&
+            (st.maxMirror[q] < rowsize[row] ||
+             (st.maxMirror[q] == rowsize[row] && st.maxMirrorCol[q] < j))) {
+          flags |= static_cast<uint8_t>(4 << q);
+          numMirrorSkipped[q]++;
+          return 0;
+        }
+        return 1;
+      };
+
+      // use row 'bestRowMinus'
+      HighsInt modeMinus =
+          bestRowMinus == -1
+              ? 0
+              : scanMode(bestRowMinus, 0,
+                         allowPredBndAnalysis || lowerImplied || hasNegCliques,
+                         lowerImplied || hasNegCliques);
+      if (modeMinus != 0) {
+        size_t p0 = numPairs,
+               r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
+        HPRESOLVE_CHECKED_CALL(checkRow(bestRowMinus, j, HighsInt{-1},
+                                        ajBestRowMinus, hasNegCliques,
+                                        modeMinus == 2));
+        pairsDir[0] += numPairs - p0;
+        redsDir[0] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
       }
-    }
+      if (modeMinus != 1 || rowDeleted[bestRowMinus]) flags |= 1;
+
+      // use row 'bestRowPlus'
+      HighsInt modePlus =
+          colDeleted[j] || bestRowPlus == -1
+              ? 0
+              : scanMode(bestRowPlus, 1,
+                         allowPredBndAnalysis || upperImplied || hasPosCliques,
+                         upperImplied || hasPosCliques);
+      if (modePlus != 0) {
+        size_t p0 = numPairs,
+               r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
+        HPRESOLVE_CHECKED_CALL(checkRow(bestRowPlus, j, HighsInt{1},
+                                        ajBestRowPlus, hasPosCliques,
+                                        modePlus == 2));
+        pairsDir[1] += numPairs - p0;
+        redsDir[1] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
+      }
+      if (modePlus != 1 || rowDeleted[bestRowPlus]) flags |= 2;
+
+      // research (presolve_domcol_mirror_skip): record what this column
+      // scanned; rows with current statistics are updated here, the others
+      // read the flags when recomputed
+      if (mirrorSkip && !colDeleted[j]) {
+        scanFlags[j] = flags;
+        for (const HighsSliceNonzero& nonz : getColumnVector(j)) {
+          HighsInt row = nonz.index();
+          MirrorRowStats& st = mirrorRows[row];
+          if (st.stamp != numMatrixLinks) continue;
+          HighsInt q = entrySign(row, nonz.value());
+          if (flags & (1 << (1 - q))) {
+            st.notScanned[q]++;
+            st.notScannedCol[q] = j;
+          }
+          if (flags & (4 << (1 - q))) st.skipped[q]++;
+        }
+      }
     }
 
     // do not use predictive bound analysis if it requires many domination
@@ -1559,35 +1557,30 @@ HPresolve::Result HPresolve::dominatedColumns(
               static_cast<double>(pairsDir[0]), static_cast<double>(redsDir[0]),
               static_cast<double>(pairsDir[1]), static_cast<double>(redsDir[1]),
               (timer ? timer->read() : 0.0) - domcolT0);
-  highsLogDev(options->log_options, HighsLogType::kVerbose,
-              "Dominated columns kinds (-,-) (-,+) (+,-) (+,+): tests %.0f %.0f "
-              "%.0f %.0f found %.0f %.0f %.0f %.0f distinct %.0f; mirror "
-              "skips minus %.0f plus %.0f forced %.0f col fixings %.0f "
-              "recomputed %.0f; pair once prefix lists %.0f incomplete %.0f "
-              "moved %.0f lost %.0f (first 2j+q %d) forced %.0f switch col %d "
-              "signs dirty %d; tested owned %.0f open %.0f\n",
-              static_cast<double>(testsKind[0]),
-              static_cast<double>(testsKind[1]),
-              static_cast<double>(testsKind[2]),
-              static_cast<double>(testsKind[3]),
-              static_cast<double>(foundKind[0]),
-              static_cast<double>(foundKind[1]),
-              static_cast<double>(foundKind[2]),
-              static_cast<double>(foundKind[3]),
-              static_cast<double>(distinctFound.size()),
-              static_cast<double>(numMirrorSkipped[0]),
-              static_cast<double>(numMirrorSkipped[1]),
-              static_cast<double>(numMirrorForced),
-              static_cast<double>(numMirrorFixCol),
-              static_cast<double>(numMirrorRecomputed),
-              static_cast<double>(numPrefixLists),
-              static_cast<double>(numIncompleteLists),
-              static_cast<double>(numOnceMoved),
-              static_cast<double>(numOnceLost), static_cast<int>(onceLostCol),
-              static_cast<double>(numForcedLists),
-              static_cast<int>(onceSwitchCol), domcolSignsDirty ? 1 : 0,
-              static_cast<double>(numOnceWhy[0]),
-              static_cast<double>(numOnceWhy[1]));
+  highsLogDev(
+      options->log_options, HighsLogType::kVerbose,
+      "Dominated columns kinds (-,-) (-,+) (+,-) (+,+): tests %.0f %.0f "
+      "%.0f %.0f found %.0f %.0f %.0f %.0f distinct %.0f; mirror "
+      "skips minus %.0f plus %.0f forced %.0f col fixings %.0f "
+      "recomputed %.0f; pair once prefix lists %.0f incomplete %.0f "
+      "moved %.0f lost %.0f (first 2j+q %d) forced %.0f switch col %d "
+      "signs dirty %d; tested owned %.0f open %.0f\n",
+      static_cast<double>(testsKind[0]), static_cast<double>(testsKind[1]),
+      static_cast<double>(testsKind[2]), static_cast<double>(testsKind[3]),
+      static_cast<double>(foundKind[0]), static_cast<double>(foundKind[1]),
+      static_cast<double>(foundKind[2]), static_cast<double>(foundKind[3]),
+      static_cast<double>(distinctFound.size()),
+      static_cast<double>(numMirrorSkipped[0]),
+      static_cast<double>(numMirrorSkipped[1]),
+      static_cast<double>(numMirrorForced),
+      static_cast<double>(numMirrorFixCol),
+      static_cast<double>(numMirrorRecomputed),
+      static_cast<double>(numPrefixLists),
+      static_cast<double>(numIncompleteLists),
+      static_cast<double>(numOnceMoved), static_cast<double>(numOnceLost),
+      static_cast<int>(onceLostCol), static_cast<double>(numForcedLists),
+      static_cast<int>(onceSwitchCol), domcolSignsDirty ? 1 : 0,
+      static_cast<double>(numOnceWhy[0]), static_cast<double>(numOnceWhy[1]));
   // research (presolve_domcol_first_visit)
   if (fvs)
     highsLogDev(options->log_options, HighsLogType::kVerbose,
@@ -1598,8 +1591,8 @@ HPresolve::Result HPresolve::dominatedColumns(
                 "missed %.0f; closed-form scans %.0f walked scans %.0f "
                 "closed-form walk fallbacks %.0f row-cost scans %.0f\n",
                 static_cast<double>(numFvsOffered),
-                static_cast<double>(testsKind[0] + testsKind[1] +
-                                    testsKind[2] + testsKind[3]),
+                static_cast<double>(testsKind[0] + testsKind[1] + testsKind[2] +
+                                    testsKind[3]),
                 static_cast<double>(numDomChecksPredBndAnalysis),
                 domcolCountPossible ? 1 : 0,
                 static_cast<double>(numFvsPredScans),

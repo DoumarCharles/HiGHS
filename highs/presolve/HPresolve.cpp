@@ -1002,8 +1002,7 @@ void HPresolve::changeRowLower(HighsInt row, double newLower,
   double oldLower = model->row_lower_[row];
   if (oldLower == newLower) return;
   // research (presolve_domcol_first_visit)
-  if (domcolFvsTracking &&
-      (oldLower == -kHighsInf) != (newLower == -kHighsInf))
+  if (domcolFvsTracking && (oldLower == -kHighsInf) != (newLower == -kHighsInf))
     domcolSignsDirty = true;
   model->row_lower_[row] = newLower;
 

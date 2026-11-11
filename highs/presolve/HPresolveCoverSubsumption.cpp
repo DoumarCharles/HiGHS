@@ -36,10 +36,10 @@ HPresolve::Result HPresolve::coverSubsumption(
   for (HighsInt row = 0; row < model->num_row_; ++row) {
     if (rowDeleted[row] || rowsize[row] < 2) continue;
     // a covering row has one infinite side and a nonzero finite side
-    const bool lowerSide = model->row_upper_[row] == kHighsInf &&
-                           model->row_lower_[row] > 0;
-    const bool upperSide = model->row_lower_[row] == -kHighsInf &&
-                           model->row_upper_[row] < 0;
+    const bool lowerSide =
+        model->row_upper_[row] == kHighsInf && model->row_lower_[row] > 0;
+    const bool upperSide =
+        model->row_lower_[row] == -kHighsInf && model->row_upper_[row] < 0;
     if (!lowerSide && !upperSide) continue;
     double v = 0.0;
     bool ok = true;
