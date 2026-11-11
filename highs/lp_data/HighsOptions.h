@@ -471,6 +471,7 @@ struct HighsOptionsStruct {
   bool presolve_cover_subsumption;
   bool presolve_cover_trigger;
   bool presolve_domcol_mirror_skip;
+  bool presolve_domcol_pair_once;
   bool presolve_remove_slacks;
   bool presolve_fm_obj_reformulation;
   bool no_unnecessary_rebuild_refactor;
@@ -656,6 +657,7 @@ struct HighsOptionsStruct {
         presolve_cover_subsumption(false),
         presolve_cover_trigger(false),
         presolve_domcol_mirror_skip(false),
+        presolve_domcol_pair_once(false),
         presolve_remove_slacks(false),
         presolve_fm_obj_reformulation(false),
         no_unnecessary_rebuild_refactor(false),
@@ -1778,6 +1780,16 @@ class HighsOptions : public HighsOptionsStruct {
         "search (research)",
         advanced, &presolve_domcol_mirror_skip, false);
     records.push_back(record_bool);
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_pair_once",
+        "Dominated columns test each pair once, when its lower-index column "
+        "is visited, trying both fixings; that column lists its partners from "
+        "its shortest row or, when shorter, from all its rows of the other "
+        "sign. Overrides presolve_domcol_mirror_skip. Changes the search "
+        "(research)",
+        advanced, &presolve_domcol_pair_once, false);
+    records.push_back(record_bool);
+
     record_bool =
         new OptionRecordBool("presolve_remove_slacks",
                              "Remove slacks after presolve: redundant option!",

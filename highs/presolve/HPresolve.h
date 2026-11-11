@@ -163,6 +163,18 @@ class HPresolve {
   // unchanged (deleted entries are recognised by the reader)
   size_t numMatrixLinks = 0;
 
+  // research (presolve_domcol_pair_once): while dominated columns runs,
+  // entries of each live column per sign in <= form (2 * col + sign, sign 1
+  // = positive), kept by link / unlink; the epoch counts columns losing or
+  // gaining their last entry of a sign; dirty = some sign may have flipped
+  bool domcolSignTracking = false;
+  bool domcolSignsDirty = false;
+  size_t domcolFreeEpoch = 0;
+  std::vector<HighsInt> domcolSignCount;
+  HighsInt domcolEntrySign(HighsInt row, double val) const {
+    return (model->row_upper_[row] != kHighsInf ? val : -val) > 0 ? 1 : 0;
+  }
+
   enum class Result {
     kOk,
     kPrimalInfeasible,

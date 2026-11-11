@@ -560,9 +560,18 @@ void HPresolve::link(HighsInt pos) {
     ++rowsizeSingleton[Arow[pos]];
   else if (colsize[Acol[pos]] == 2)
     --rowsizeSingleton[Arow[Anext[pos]]];
+
+  if (domcolSignTracking && !colDeleted[Acol[pos]] &&
+      domcolSignCount[2 * Acol[pos] +
+                      domcolEntrySign(Arow[pos], Avalue[pos])]++ == 0)
+    ++domcolFreeEpoch;
 }
 
 void HPresolve::unlink(HighsInt pos) {
+  if (domcolSignTracking && !colDeleted[Acol[pos]] &&
+      --domcolSignCount[2 * Acol[pos] +
+                        domcolEntrySign(Arow[pos], Avalue[pos])] == 0)
+    ++domcolFreeEpoch;
   HighsInt next = Anext[pos];
   HighsInt prev = Aprev[pos];
 
@@ -995,6 +1004,8 @@ void HPresolve::changeRowUpper(HighsInt row, double newUpper,
                                bool skipRowDualUpdate) {
   double oldUpper = model->row_upper_[row];
   if (oldUpper == newUpper) return;
+  if (domcolSignTracking && (oldUpper == kHighsInf) != (newUpper == kHighsInf))
+    domcolSignsDirty = true;
   model->row_upper_[row] = newUpper;
 
   if (!skipRowDualUpdate) {
@@ -1314,6 +1325,8 @@ void HPresolve::addToMatrix(const HighsInt row, const HighsInt col,
       unlink(pos);
     } else {
       matrixNonZeroChanged(row, col, Avalue[pos], sum, false, false);
+      if (domcolSignTracking && (Avalue[pos] > 0) != (sum > 0))
+        domcolSignsDirty = true;
       Avalue[pos] = sum;
     }
   }
@@ -2053,6 +2066,7 @@ HPresolve::Result HPresolve::transformColumn(
 
   model->offset_ += model->col_cost_[col] * constant;
   model->col_cost_[col] *= scale;
+  if (domcolSignTracking && scale < 0) domcolSignsDirty = true;
 
   for (HighsInt coliter = colhead[col]; coliter != -1;
        coliter = Anext[coliter]) {
@@ -2087,6 +2101,7 @@ void HPresolve::scaleRow(HighsInt row, double scale, bool integral) {
 }
 
 void HPresolve::scaleStoredRow(HighsInt row, double scale, bool integral) {
+  if (domcolSignTracking && scale < 0) domcolSignsDirty = true;
   model->row_upper_[row] *= scale;
   model->row_lower_[row] *= scale;
   implRowDualLower[row] /= scale;

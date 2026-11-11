@@ -179,7 +179,8 @@ HPresolve::Result HPresolve::dominatedColumns(
   // row is strictly shorter (ties: the lower index scans) and no entry left
   // its mirror unscanned; a skipped row forces the mirror scans, which then
   // try both fixings of Theorem 2.
-  const bool mirrorSkip = options->presolve_domcol_mirror_skip;
+  const bool mirrorSkip = options->presolve_domcol_mirror_skip &&
+                          !options->presolve_domcol_pair_once;
   // sign of an entry in <= form: 1 = positive ("plus" row), 0 = negative
   auto entrySign = [&](HighsInt row, double val) -> HighsInt {
     return (model->row_upper_[row] != kHighsInf ? val : -val) > 0 ? 1 : 0;
@@ -259,6 +260,72 @@ HPresolve::Result HPresolve::dominatedColumns(
            (st.notScanned[q] > 0 && colDeleted[st.notScannedCol[q]]);
   };
 
+  // research (presolve_domcol_pair_once): each pair is tested once, when its
+  // lower-index column is visited, or later from the other column if that
+  // column's list did not run. For y = d x_j, every partner z of y ≻ z has
+  // all its negative rows among y's negative rows, so a partner with a
+  // negative row is listed by the union of y's negative rows; a partner with
+  // none ("free") is listed only by y's shortest positive row. j uses the
+  // union when it is shorter and that row has no free entry.
+  const bool pairOnce = options->presolve_domcol_pair_once;
+  struct SignTrackingGuard {
+    HPresolve& presolve;
+    ~SignTrackingGuard() { presolve.domcolSignTracking = false; }
+  } signTrackingGuard{*this};
+  std::vector<HighsInt> pairStamp;
+  HighsInt pairVisit = 0;
+  struct FreeRowStats {
+    HighsInt numFree;
+    HighsInt freeCol[2];
+    size_t links;
+    size_t epoch;
+  };
+  std::vector<FreeRowStats> freeRows;
+  std::vector<std::pair<HighsInt, double>> unionRows;
+  size_t numUnionLists = 0;
+  size_t numIncompleteLists = 0;
+  if (pairOnce) {
+    domcolSignCount.assign(2 * static_cast<size_t>(model->num_col_), 0);
+    for (HighsInt c = 0; c < model->num_col_; ++c) {
+      if (colDeleted[c]) continue;
+      for (const HighsSliceNonzero& nonz : getColumnVector(c))
+        domcolSignCount[2 * c + entrySign(nonz.index(), nonz.value())]++;
+    }
+    domcolSignsDirty = false;
+    domcolSignTracking = true;
+    scanFlags.assign(model->num_col_, 0);
+    pairStamp.assign(2 * static_cast<size_t>(model->num_col_), -1);
+    FreeRowStats init = {0, {-1, -1}, ~size_t{0}, ~size_t{0}};
+    freeRows.assign(model->num_row_, init);
+  }
+  // entries of the row whose column has no row of the other sign (upper
+  // bound: deleted entries stay counted until a recompute)
+  auto freeEntries = [&](HighsInt row) -> HighsInt {
+    FreeRowStats& st = freeRows[row];
+    // a deleted column counted free (it is in no relation any more): the
+    // count is recomputed once
+    bool freeColDeleted = false;
+    for (HighsInt i = 0; i < std::min(st.numFree, HighsInt{2}); ++i)
+      freeColDeleted = freeColDeleted || colDeleted[st.freeCol[i]];
+    if (st.links == numMatrixLinks && st.epoch == domcolFreeEpoch &&
+        !freeColDeleted)
+      return st.numFree;
+    st.numFree = 0;
+    getRowPositions(row, mirror_rowpositions);
+    for (HighsInt pos : mirror_rowpositions) {
+      if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+      HighsInt c = Acol[pos];
+      if (colDeleted[c]) continue;
+      if (domcolSignCount[2 * c + 1 - entrySign(row, Avalue[pos])] == 0) {
+        if (st.numFree < 2) st.freeCol[st.numFree] = c;
+        st.numFree++;
+      }
+    }
+    st.links = numMatrixLinks;
+    st.epoch = domcolFreeEpoch;
+    return st.numFree;
+  };
+
   // research (measurement only, dev log): domination tests and relations
   // found per kind (direction, direction_k), distinct relations (y ≻ z and
   // -z ≻ -y counted once)
@@ -282,12 +349,18 @@ HPresolve::Result HPresolve::dominatedColumns(
     HighsInt bestRowMinus = -1;
     HighsInt bestRowMinusLen = kHighsIInf;
     double ajBestRowMinus = 0.0;
+    // research (presolve_domcol_pair_once): total length of j's rows of each
+    // sign
+    int64_t sumLenPlus = 0;
+    int64_t sumLenMinus = 0;
 
     for (const HighsSliceNonzero& nonz : getColumnVector(j)) {
       HighsInt row = nonz.index();
       HighsInt scale = model->row_upper_[row] != kHighsInf ? 1 : -1;
 
       double val = scale * nonz.value();
+      if (val > 0.0) sumLenPlus += rowsize[row];
+      if (val < 0.0) sumLenMinus += rowsize[row];
       if (val > 0.0 && rowsize[row] < bestRowPlusLen) {
         bestRowPlus = row;
         bestRowPlusLen = rowsize[row];
@@ -509,6 +582,122 @@ HPresolve::Result HPresolve::dominatedColumns(
       return Result::kOk;
     };
 
+    // row positions, from the row cache when it is on
+    auto positionsOf = [&](HighsInt row) -> const std::vector<HighsInt>& {
+      if (!rowCache) {
+        getRowPositions(row, check_rowpositions);
+        return check_rowpositions;
+      }
+      if (cache_rowstamp[row] != numMatrixLinks) {
+        getRowPositions(row, cache_rowpositions[row]);
+        cache_rowstamp[row] = numMatrixLinks;
+      }
+      return cache_rowpositions[row];
+    };
+
+    // research (presolve_domcol_pair_once): test direction * x_col ≻
+    // dirK * x_k once, with both fixings; row is the listing row, aj and ak
+    // the two coefficients in it
+    auto checkPairOnce = [&](HighsInt row, HighsInt col, HighsInt k,
+                             HighsInt direction, HighsInt dirK, double aj,
+                             double ak, bool hasCliques) {
+      if (k == col || colDeleted[k]) return Result::kOk;
+      // a visited k listed this pair in its scan of sign -dirK unless that
+      // scan did not run in full
+      if (k < col && !(scanFlags[k] & (1 << (dirK > 0 ? 0 : 1))))
+        return Result::kOk;
+      numPairs++;
+      if (domcolCountPossible &&
+          !checkSignatures(direction, col, direction, k) &&
+          !checkSignatures(direction, col, -direction, k))
+        return Result::kOk;
+      if (options->presolve_domcol_signature_first &&
+          !checkSignatures(direction, col, direction, k) &&
+          !checkSignatures(direction, col, -direction, k) &&
+          (!allowPredBndAnalysis ||
+           ((hasCliques ||
+             (direction > 0 ? isUpperImplied(col) : isLowerImplied(col))) &&
+            model->col_lower_[k] != -kHighsInf &&
+            model->col_upper_[k] != kHighsInf)))
+        return Result::kOk;
+      numPairsChecked++;
+      bool sameVarType = varsHaveSameType(col, k);
+      bool boundImplied =
+          direction > 0 ? isUpperImplied(col) : isLowerImplied(col);
+      bool kImplied = dirK > 0 ? isLowerImplied(k) : isUpperImplied(k);
+      bool kCliques = isBinary(k) && mipsolver->mipdata_->cliquetable.numCliques(
+                                         k, dirK > 0 ? 0 : 1) > 0;
+      if (!boundImplied && !hasCliques && !sameVarType && !kImplied &&
+          !kCliques)
+        return Result::kOk;
+      if (!checkDominationNonZero(row, direction * aj, dirK * ak))
+        return Result::kOk;
+      return checkCols(row, col, k, direction, direction * dirK, boundImplied,
+                       hasCliques, sameVarType, true, false, kImplied,
+                       kCliques);
+    };
+
+    // research (presolve_domcol_pair_once): list the partners of direction
+    // * x_col from its shortest row of that sign; complete = every partner
+    // was offered
+    auto listFromRow = [&](HighsInt row, HighsInt col, HighsInt direction,
+                           double aj, bool hasCliques, bool& complete) {
+      complete = false;
+      if (rowDeleted[row]) return Result::kOk;
+      const std::vector<HighsInt>& rowpositions = positionsOf(row);
+      for (HighsInt pos : rowpositions) {
+        if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+        HighsInt k = Acol[pos];
+        HPRESOLVE_CHECKED_CALL(checkPairOnce(row, col, k, direction, direction,
+                                             aj, Avalue[pos], hasCliques));
+        if (colDeleted[col] || rowDeleted[row]) return Result::kOk;
+        if (colDeleted[k] || Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+        HPRESOLVE_CHECKED_CALL(checkPairOnce(row, col, k, direction,
+                                             -direction, aj, Avalue[pos],
+                                             hasCliques));
+        if (colDeleted[col] || rowDeleted[row]) return Result::kOk;
+      }
+      complete = true;
+      return Result::kOk;
+    };
+
+    // research (presolve_domcol_pair_once): list them from all rows where
+    // direction * x_col is negative; a partner dirK * x_k is offered from a
+    // row where it is negative too, once
+    auto listFromUnion = [&](HighsInt col, HighsInt direction,
+                             bool hasCliques, bool& complete) {
+      complete = false;
+      unionRows.clear();
+      for (const HighsSliceNonzero& nonz : getColumnVector(col))
+        if (entrySign(nonz.index(), nonz.value()) == (direction > 0 ? 0 : 1))
+          unionRows.emplace_back(nonz.index(), nonz.value());
+      ++pairVisit;
+      const size_t links0 = numMatrixLinks;
+      const size_t epoch0 = domcolFreeEpoch;
+      for (const std::pair<HighsInt, double>& r : unionRows) {
+        HighsInt row = r.first;
+        if (rowDeleted[row]) continue;
+        const std::vector<HighsInt>& rowpositions = positionsOf(row);
+        for (HighsInt pos : rowpositions) {
+          if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+          HighsInt k = Acol[pos];
+          if (k == col || colDeleted[k]) continue;
+          HighsInt dirK = entrySign(row, Avalue[pos]) == 1 ? -1 : 1;
+          size_t slot = 2 * static_cast<size_t>(k) + (dirK > 0 ? 1 : 0);
+          if (pairStamp[slot] == pairVisit) continue;
+          pairStamp[slot] = pairVisit;
+          HPRESOLVE_CHECKED_CALL(checkPairOnce(row, col, k, direction, dirK,
+                                               r.second, Avalue[pos],
+                                               hasCliques));
+          if (colDeleted[col] || rowDeleted[row]) return Result::kOk;
+        }
+      }
+      // rows and signs unchanged: no partner can have become free
+      complete = numMatrixLinks == links0 && domcolFreeEpoch == epoch0 &&
+                 !domcolSignsDirty;
+      return Result::kOk;
+    };
+
     // lambda for finding a domination relationship in the given row
     auto checkRow = [&](HighsInt row, HighsInt col, HighsInt direction,
                         double bestVal, bool hasCliques, bool reliedOnly) {
@@ -623,6 +812,41 @@ HPresolve::Result HPresolve::dominatedColumns(
     bool hasPosCliques =
         isBinary(j) && mipsolver->mipdata_->cliquetable.numCliques(j, 1) > 0;
 
+    if (pairOnce) {
+      // research (presolve_domcol_pair_once): direction -1 (minus row) then
+      // +1, as below; a list that did not run in full is flagged, and the
+      // later partners then test those pairs themselves
+      uint8_t onceFlags = 0;
+      for (HighsInt q = 0; q < 2; ++q) {
+        const HighsInt direction = q == 0 ? -1 : 1;
+        const HighsInt row = q == 0 ? bestRowMinus : bestRowPlus;
+        const double aj = q == 0 ? ajBestRowMinus : ajBestRowPlus;
+        const bool cliques = q == 0 ? hasNegCliques : hasPosCliques;
+        const bool implied = q == 0 ? lowerImplied : upperImplied;
+        bool complete = false;
+        if (!colDeleted[j] && row != -1 &&
+            (allowPredBndAnalysis || implied || cliques)) {
+          // rows where direction * x_j is negative
+          const int64_t unionLen = q == 0 ? sumLenPlus : sumLenMinus;
+          size_t p0 = numPairs,
+                 r0 = numFixedCols + numModifiedBndsPredBndAnalysis;
+          if (!domcolSignsDirty && unionLen < rowsize[row] &&
+              freeEntries(row) - (unionLen == 0 ? 1 : 0) == 0) {
+            numUnionLists++;
+            HPRESOLVE_CHECKED_CALL(
+                listFromUnion(j, direction, cliques, complete));
+          } else {
+            HPRESOLVE_CHECKED_CALL(
+                listFromRow(row, j, direction, aj, cliques, complete));
+          }
+          if (!complete) numIncompleteLists++;
+          pairsDir[q] += numPairs - p0;
+          redsDir[q] += numFixedCols + numModifiedBndsPredBndAnalysis - r0;
+        }
+        if (!complete) onceFlags |= static_cast<uint8_t>(1 << q);
+      }
+      if (!colDeleted[j]) scanFlags[j] = onceFlags;
+    } else {
     // which scan to run for row 'row' of sign q (0 minus, 1 plus):
     // 0 = none, 1 = full, 2 = only the pairs whose other column relied on it
     uint8_t flags = 0;
@@ -705,6 +929,7 @@ HPresolve::Result HPresolve::dominatedColumns(
         if (flags & (4 << (1 - q))) st.skipped[q]++;
       }
     }
+    }
 
     // do not use predictive bound analysis if it requires many domination
     // checks and only yields few fixings or improved bounds on average
@@ -744,7 +969,8 @@ HPresolve::Result HPresolve::dominatedColumns(
               "Dominated columns kinds (-,-) (-,+) (+,-) (+,+): tests %.0f %.0f "
               "%.0f %.0f found %.0f %.0f %.0f %.0f distinct %.0f; mirror "
               "skips minus %.0f plus %.0f forced %.0f col fixings %.0f "
-              "recomputed %.0f\n",
+              "recomputed %.0f; pair once union lists %.0f incomplete %.0f "
+              "signs dirty %d\n",
               static_cast<double>(testsKind[0]),
               static_cast<double>(testsKind[1]),
               static_cast<double>(testsKind[2]),
@@ -758,7 +984,10 @@ HPresolve::Result HPresolve::dominatedColumns(
               static_cast<double>(numMirrorSkipped[1]),
               static_cast<double>(numMirrorForced),
               static_cast<double>(numMirrorFixCol),
-              static_cast<double>(numMirrorRecomputed));
+              static_cast<double>(numMirrorRecomputed),
+              static_cast<double>(numUnionLists),
+              static_cast<double>(numIncompleteLists),
+              domcolSignsDirty ? 1 : 0);
 
   return Result::kOk;
 }
