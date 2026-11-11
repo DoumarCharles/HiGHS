@@ -395,7 +395,7 @@ HPresolve::Result HPresolve::dominatedColumns(
         // research (presolve_domcol_count_possible): skip pairs whose
         // signatures rule out domination in both directions, so they do not
         // count as predictive bound analysis work
-        if (options->presolve_domcol_count_possible &&
+        if (domcolCountPossible &&
             !checkSignatures(direction, col, direction, k) &&
             !checkSignatures(direction, col, -direction, k))
           continue;
@@ -478,7 +478,8 @@ HPresolve::Result HPresolve::dominatedColumns(
         static_cast<double>(numCols);
     allowPredBndAnalysis =
         allowPredBndAnalysis &&
-        (numDomChecksPredBndAnalysis <=
+        (options->presolve_domcol_no_pred_limit ||
+         numDomChecksPredBndAnalysis <=
              30 * maxAverageNumDomChecksPredBndAnalysis ||
          (averageNumDomChecksPredBndAnalysis <=
               maxAverageNumDomChecksPredBndAnalysis &&

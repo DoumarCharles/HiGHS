@@ -466,6 +466,10 @@ struct HighsOptionsStruct {
   bool presolve_domcol_count_possible;
   bool presolve_domcol_signature_first;
   bool presolve_domcol_row_cache;
+  bool presolve_domcol_no_pred_limit;
+  HighsInt presolve_domcol_repeat;
+  bool presolve_cover_subsumption;
+  bool presolve_cover_trigger;
   bool presolve_remove_slacks;
   bool presolve_fm_obj_reformulation;
   bool no_unnecessary_rebuild_refactor;
@@ -646,6 +650,10 @@ struct HighsOptionsStruct {
         presolve_domcol_count_possible(false),
         presolve_domcol_signature_first(false),
         presolve_domcol_row_cache(false),
+        presolve_domcol_no_pred_limit(false),
+        presolve_domcol_repeat(0),
+        presolve_cover_subsumption(false),
+        presolve_cover_trigger(false),
         presolve_remove_slacks(false),
         presolve_fm_obj_reformulation(false),
         no_unnecessary_rebuild_refactor(false),
@@ -1725,6 +1733,37 @@ class HighsOptions : public HighsOptionsStruct {
         "fixing or bound change (upstream issue 3583). Same result, faster "
         "(research)",
         advanced, &presolve_domcol_row_cache, false);
+    records.push_back(record_bool);
+
+    record_bool = new OptionRecordBool(
+        "presolve_domcol_no_pred_limit",
+        "Dominated columns never switch predictive bound analysis off for "
+        "too much work. Changes the search (research)",
+        advanced, &presolve_domcol_no_pred_limit, false);
+    records.push_back(record_bool);
+
+    record_int = new OptionRecordInt(
+        "presolve_domcol_repeat",
+        "Extra calls of dominated columns at the end of the presolve loop, "
+        "each made only if the previous call reduced the problem. Changes "
+        "the search (research)",
+        advanced, &presolve_domcol_repeat, 0, 0, kHighsIInf);
+    records.push_back(record_int);
+
+    record_bool = new OptionRecordBool(
+        "presolve_cover_subsumption",
+        "Before each dominated columns call, remove covering rows (sum of "
+        "binaries >= 1) whose columns include those of another covering "
+        "row. Changes the search (research)",
+        advanced, &presolve_cover_subsumption, false);
+    records.push_back(record_bool);
+
+    record_bool = new OptionRecordBool(
+        "presolve_cover_trigger",
+        "When presolve_cover_subsumption removes a covering row, switch "
+        "presolve_domcol_count_possible on for the rest of presolve. Changes "
+        "the search (research)",
+        advanced, &presolve_cover_trigger, false);
     records.push_back(record_bool);
 
     record_bool =

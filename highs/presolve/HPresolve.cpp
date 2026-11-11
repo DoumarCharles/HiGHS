@@ -3919,6 +3919,7 @@ HPresolve::Result HPresolve::fastPresolveLoop(
 }
 
 HPresolve::Result HPresolve::presolve(HighsPostsolveStack& postsolve_stack) {
+  domcolCountPossible = options->presolve_domcol_count_possible;
   // For the innermost loop the rounds are nested with an outer loop
   // that layers the newer presolvers
   //
@@ -4071,6 +4072,9 @@ HPresolve::Result HPresolve::presolve(HighsPostsolveStack& postsolve_stack) {
     bool tryFourierMotzkin = mipsolver != nullptr;
     HighsInt numCliquesBeforeProbing = -1;
     bool domcolAfterProbingCalled = false;
+    // research (presolve_domcol_repeat)
+    bool domcolLastReduced = false;
+    HighsInt numDomcolRepeats = 0;
     bool dependentEquationsCalled = mipsolver != nullptr;
 
     // Start of main presolve loop
@@ -4180,9 +4184,12 @@ HPresolve::Result HPresolve::presolve(HighsPostsolveStack& postsolve_stack) {
       if (mipsolver != nullptr && numCliquesBeforeProbing == -1) {
         numCliquesBeforeProbing = mipsolver->mipdata_->cliquetable.numCliques();
         storeCurrentProblemSize();
+        if (options->presolve_cover_subsumption)
+          HPRESOLVE_CHECKED_CALL(coverSubsumption(postsolve_stack));
         HPRESOLVE_CHECKED_CALL(dominatedColumns(postsolve_stack));
         if (problemSizeReduction() > 0.0)
           HPRESOLVE_CHECKED_CALL(fastPresolveLoop(postsolve_stack));
+        domcolLastReduced = problemSizeReduction() > 0.0;
         if (problemSizeReduction() > 0.05) continue;
       }
 
@@ -4237,10 +4244,28 @@ HPresolve::Result HPresolve::presolve(HighsPostsolveStack& postsolve_stack) {
           !domcolAfterProbingCalled) {
         domcolAfterProbingCalled = true;
         storeCurrentProblemSize();
+        if (options->presolve_cover_subsumption)
+          HPRESOLVE_CHECKED_CALL(coverSubsumption(postsolve_stack));
         HPRESOLVE_CHECKED_CALL(dominatedColumns(postsolve_stack));
         if (problemSizeReduction() > 0.0)
           HPRESOLVE_CHECKED_CALL(fastPresolveLoop(postsolve_stack));
+        domcolLastReduced = problemSizeReduction() > 0.0;
         if (problemSizeReduction() > 0.05) continue;
+      }
+
+      // research (presolve_domcol_repeat): call dominated columns again while
+      // the previous call reduced the problem
+      if (mipsolver != nullptr && domcolLastReduced &&
+          numDomcolRepeats < options->presolve_domcol_repeat) {
+        ++numDomcolRepeats;
+        storeCurrentProblemSize();
+        if (options->presolve_cover_subsumption)
+          HPRESOLVE_CHECKED_CALL(coverSubsumption(postsolve_stack));
+        HPRESOLVE_CHECKED_CALL(dominatedColumns(postsolve_stack));
+        if (problemSizeReduction() > 0.0)
+          HPRESOLVE_CHECKED_CALL(fastPresolveLoop(postsolve_stack));
+        domcolLastReduced = problemSizeReduction() > 0.0;
+        if (domcolLastReduced) continue;
       }
 
       break;

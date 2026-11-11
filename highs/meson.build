@@ -303,6 +303,7 @@ _srcs = [
     'presolve/HPresolveAnalysis.cpp',
     'presolve/HPresolveCliqueTable.cpp',
     'presolve/HPresolveColStuffing.cpp',
+    'presolve/HPresolveCoverSubsumption.cpp',
     'presolve/HPresolveDependent.cpp',
     'presolve/HPresolveDominatedCols.cpp',
     'presolve/HPresolveDualFixing.cpp',

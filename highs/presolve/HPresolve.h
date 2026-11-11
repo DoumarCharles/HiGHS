@@ -150,6 +150,11 @@ class HPresolve {
   HighsInt oldNumRow;
   bool probingEarlyAbort;
 
+  // research (presolve_cover_trigger): dominated columns count only possible
+  // dominations (presolve_domcol_count_possible), set by the option or by a
+  // covering row removed by coverSubsumption
+  bool domcolCountPossible = false;
+
   // research (presolve_domcol_row_cache): number of entries linked into the
   // matrix so far; row positions collected earlier stay complete while it is
   // unchanged (deleted entries are recognised by the reader)
