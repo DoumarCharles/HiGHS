@@ -763,23 +763,13 @@ HPresolve::Result HPresolve::dominatedColumns(
       }
     };
 
-    // lambda for finding a domination relationship in the given row
-    auto checkRow = [&](HighsInt row, HighsInt col, HighsInt direction,
-                        double bestVal, bool hasCliques, bool reliedOnly) {
-      if (rowDeleted[row]) return Result::kOk;
-      std::vector<HighsInt>* rowpositions = &check_rowpositions;
-      if (rowCache) {
-        rowpositions = &cache_rowpositions[row];
-        if (cache_rowstamp[row] != numMatrixLinks) {
-          getRowPositions(row, *rowpositions);
-          cache_rowstamp[row] = numMatrixLinks;
-        }
-      } else {
-        getRowPositions(row, check_rowpositions);
-      }
-      for (HighsInt pos : *rowpositions) {
-        if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
-
+    // lambda for one entry of the row scanned by checkRow; stop = the column
+    // or the row is gone
+    auto checkEntry = [&](HighsInt row, HighsInt col, HighsInt pos,
+                          HighsInt direction, double bestVal, bool hasCliques,
+                          bool reliedOnly, bool& stop) {
+      stop = false;
+      do {
         // get column index
         HighsInt k = Acol[pos];
 
@@ -865,6 +855,32 @@ HPresolve::Result HPresolve::dominatedColumns(
                                            false));
           if (colDeleted[col] || rowDeleted[row]) break;
         }
+      } while (false);
+      // only checkCols changes the model, and the scan stops right after it
+      stop = colDeleted[col] || rowDeleted[row];
+      return Result::kOk;
+    };
+
+    // lambda for finding a domination relationship in the given row
+    auto checkRow = [&](HighsInt row, HighsInt col, HighsInt direction,
+                        double bestVal, bool hasCliques, bool reliedOnly) {
+      if (rowDeleted[row]) return Result::kOk;
+      std::vector<HighsInt>* rowpositions = &check_rowpositions;
+      if (rowCache) {
+        rowpositions = &cache_rowpositions[row];
+        if (cache_rowstamp[row] != numMatrixLinks) {
+          getRowPositions(row, *rowpositions);
+          cache_rowstamp[row] = numMatrixLinks;
+        }
+      } else {
+        getRowPositions(row, check_rowpositions);
+      }
+      bool stop = false;
+      for (HighsInt pos : *rowpositions) {
+        if (Avalue[pos] == 0.0 || Arow[pos] != row) continue;
+        HPRESOLVE_CHECKED_CALL(checkEntry(row, col, pos, direction, bestVal,
+                                          hasCliques, reliedOnly, stop));
+        if (stop) break;
       }
       return Result::kOk;
     };
