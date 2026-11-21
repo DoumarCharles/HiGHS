@@ -3429,8 +3429,11 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
           // skip continuous variables
           if (model->integrality_[col] == HighsVarType::kContinuous) continue;
 
+          // the bound used must be integral: with a fractional bound u, the
+          // value floor(u) would lose the row's slack
           if (val > maxAbsCoefValue + primal_feastol) {
             assert(col_upper != kHighsInf);
+            if (col_upper != std::floor(col_upper)) continue;
             // new matrix coefficient is direction * maxAbsCoefValue; subtract
             // existing matrix coefficient to get delta
             HighsCDouble delta = direction * (maxAbsCoefValue - val);
@@ -3438,6 +3441,7 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
             rhs += delta * col_upper;
           } else if (val < -maxAbsCoefValue - primal_feastol) {
             assert(col_lower != -kHighsInf);
+            if (col_lower != std::ceil(col_lower)) continue;
             // new matrix coefficient is (-direction) * maxAbsCoefValue;
             // subtract existing matrix coefficient to get delta
             HighsCDouble delta = -direction * (maxAbsCoefValue + val);
