@@ -957,7 +957,11 @@ void HEkkDual::solvePhase2() {
                     !ekk_instance_.rebuildRefactor(rebuild_reason);
     // ToDo: Handle the following more elegantly as the first case of
     // "Assess outcome of dual phase 2"
-    if (finished && ekk_instance_.tabooBadBasisChange()) {
+    //
+    // Not when primal infeasibility has just been proved from another
+    // row: the proof does not depend on the taboo basis changes
+    if (finished && solve_phase != kSolvePhaseExit &&
+        ekk_instance_.tabooBadBasisChange()) {
       // A bad basis change has had to be made taboo without any other
       // basis changes having been performed from a fresh rebuild. In
       // other words, the only basis change that could be made is not

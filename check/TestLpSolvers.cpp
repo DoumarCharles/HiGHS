@@ -881,3 +881,70 @@ TEST_CASE("primal-cycling-phase1-cost-change", "[highs_lp_solver]") {
     h.resetThreadScheduler(true);
   }
 }
+
+// Margin by which a dual ray is a Farkas proof of infeasibility for the LP:
+// the distance between the range of ray^T A x over the column bounds and
+// the range of ray^T r over the row bounds, positive if they are disjoint
+static double farkasMargin(const HighsLp& lp, const std::vector<double>& ray) {
+  double max_ray = 0;
+  for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++)
+    max_ray = std::max(max_ray, std::fabs(ray[iRow]));
+  const double zero = 1e-9 * max_ray;
+  double row_min = 0, row_max = 0, col_min = 0, col_max = 0;
+  for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+    const double y = ray[iRow];
+    if (std::fabs(y) <= zero) continue;
+    const double at_lower = y * lp.row_lower_[iRow];
+    const double at_upper = y * lp.row_upper_[iRow];
+    row_min += std::min(at_lower, at_upper);
+    row_max += std::max(at_lower, at_upper);
+  }
+  for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++) {
+    double z = 0;
+    for (HighsInt iEl = lp.a_matrix_.start_[iCol];
+         iEl < lp.a_matrix_.start_[iCol + 1]; iEl++)
+      z += ray[lp.a_matrix_.index_[iEl]] * lp.a_matrix_.value_[iEl];
+    if (std::fabs(z) <= zero) continue;
+    const double at_lower = z * lp.col_lower_[iCol];
+    const double at_upper = z * lp.col_upper_[iCol];
+    col_min += std::min(at_lower, at_upper);
+    col_max += std::max(at_lower, at_upper);
+  }
+  return std::max(row_min - col_max, col_min - row_max);
+}
+
+TEST_CASE("issue-3418", "[highs_lp_solver]") {
+  // Infeasible, since row 10 is x10 = -1e6 with x10 >= 0. In dual phase 2
+  // a row with no entering column and no proof of infeasibility is made
+  // taboo. A row chosen later proves infeasibility, but the taboo basis
+  // change gave model status unknown
+  HighsLp lp;
+  lp.num_col_ = 12;
+  lp.num_row_ = 11;
+  lp.col_cost_ = {0, 0, 0, 0, -1, 1e-6, 1e-6, 1e-6, 5e-7, 5e-7, 5e-7, 0};
+  lp.col_lower_.assign(12, 0);
+  lp.col_upper_.assign(12, kHighsInf);
+  lp.row_lower_ = {0, 0, 0, 0, 0, 0, 0, -1.7e6, -1e6, -1e6, -1e6};
+  lp.row_upper_ = {kHighsInf, 0, 0, 0, 0, 0, 0, -1.7e6, -1e6, -1e6, -1e6};
+  lp.a_matrix_.format_ = MatrixFormat::kColwise;
+  lp.a_matrix_.start_ = {0, 2, 4, 6, 8, 9, 11, 13, 15, 17, 19, 21, 23};
+  lp.a_matrix_.index_ = {2, 3, 3, 4, 4, 5, 5, 6, 6,  1, 2, 3,
+                         1, 7, 5, 8, 5, 9, 5, 6, 10, 7, 0};
+  lp.a_matrix_.value_ = {0.95542, -1.11036, 0.9,  -0.8,     0.7, -1, 0.8, -1,
+                         0.8,     -1.04666, -1,   -1.11036, -1,  2,  -2,  1,
+                         -1,      1,        -0.8, -1,       1,   -1, -0.9};
+  Highs h;
+  h.setOptionValue("output_flag", dev_run);
+  h.setOptionValue("presolve", kHighsOffString);
+  REQUIRE(h.passModel(lp) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
+  bool has_dual_ray = false;
+  std::vector<double> dual_ray(lp.num_row_);
+  REQUIRE(h.getDualRay(has_dual_ray, dual_ray.data()) == HighsStatus::kOk);
+  REQUIRE(has_dual_ray);
+  const double farkas_margin = farkasMargin(lp, dual_ray);
+  INFO("Farkas margin " << farkas_margin);
+  REQUIRE(farkas_margin > 0);
+  h.resetThreadScheduler(true);
+}
