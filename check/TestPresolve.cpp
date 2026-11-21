@@ -2494,3 +2494,7 @@ TEST_CASE("presolve-impliedint-row-rounding", "[highs_test_presolve]") {
 TEST_CASE("presolve-probing-implied-crossing", "[highs_test_presolve]") {
   presolveToleranceCheck("probing-implied-crossing", -1.0);
 }
+
+TEST_CASE("presolve-relaxed-col-bound", "[highs_test_presolve]") {
+  presolveToleranceCheck("relaxed-col-bound", -3.576278694e-07);
+}
