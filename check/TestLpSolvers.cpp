@@ -754,3 +754,30 @@ TEST_CASE("issue-3715", "[highs_lp_solver]") {
 
   h.resetThreadScheduler(true);
 }
+
+TEST_CASE("primal-cycling-phase-change", "[highs_lp_solver]") {
+  // Feasible (x = (2, 0.75, 0, 1)) and unbounded (x3 increases). The
+  // primal simplex phase 2 returned to bases visited in phase 1, which
+  // was taken as cycling, and the solve ended with model status unknown
+  HighsLp lp;
+  lp.num_col_ = 4;
+  lp.num_row_ = 3;
+  lp.col_cost_ = {3, -3, 0, -1};
+  lp.col_lower_ = {1, 0, 0, 0.5};
+  lp.col_upper_ = {3, 0.75001, 1, kHighsInf};
+  lp.row_lower_ = {2, -2.075, -kHighsInf};
+  lp.row_upper_ = {2.5, -2.074, -0.6};
+  lp.a_matrix_.format_ = MatrixFormat::kColwise;
+  lp.a_matrix_.start_ = {0, 3, 4, 5, 6};
+  lp.a_matrix_.index_ = {0, 1, 2, 1, 0, 2};
+  lp.a_matrix_.value_ = {1, -1, 0.2, -0.1, -0.3, -1};
+  for (const std::string presolve : {kHighsOnString, kHighsOffString}) {
+    Highs h;
+    h.setOptionValue("output_flag", dev_run);
+    h.setOptionValue("presolve", presolve);
+    REQUIRE(h.passModel(lp) == HighsStatus::kOk);
+    REQUIRE(h.run() == HighsStatus::kOk);
+    REQUIRE(h.getModelStatus() == HighsModelStatus::kUnbounded);
+    h.resetThreadScheduler(true);
+  }
+}

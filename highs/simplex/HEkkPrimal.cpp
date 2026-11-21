@@ -155,6 +155,7 @@ HighsStatus HEkkPrimal::solve(const bool pass_force_phase2) {
         ekk_instance_.initialiseNonbasicValueAndMove();
         // Can now forget that we might have been backtracking
         info.backtracking_ = false;
+        backtracked_ = true;
       }
     }
     assert(solve_phase == kSolvePhase1 || solve_phase == kSolvePhase2);
@@ -392,6 +393,9 @@ void HEkkPrimal::initialiseSolve() {
   ekk_instance_.exit_algorithm_ = SimplexAlgorithm::kPrimal;
 
   rebuild_reason = kRebuildReasonNo;
+  phase_start_basis_.clear();
+  backtracked_ = false;
+  reset_phase_ = kSolvePhaseUnknown;
   if (!ekk_instance_.status_.has_dual_steepest_edge_weights) {
     // No dual weights to maintain, so ensure that the vectors are
     // assigned since they are used around factorization and when
@@ -434,6 +438,7 @@ void HEkkPrimal::solvePhase1() {
   if (ekk_instance_.bailout()) return;
   highsLogDev(ekk_instance_.options_->log_options, HighsLogType::kDetailed,
               "primal-phase1-start\n");
+  resetCyclingDetection();
   // If there's no backtracking basis, save the initial basis in case of
   // backtracking
   if (!info.valid_backtracking_basis_) ekk_instance_.putBacktrackingBasis();
@@ -528,6 +533,7 @@ void HEkkPrimal::solvePhase2() {
   highsLogDev(options.log_options, HighsLogType::kDetailed,
               "primal-phase2-start\n");
   phase2UpdatePrimal(true);
+  resetCyclingDetection();
 
   // If there's no backtracking basis Save the initial basis in case of
   // backtracking
@@ -643,6 +649,35 @@ void HEkkPrimal::solvePhase2() {
       model_status = HighsModelStatus::kUnbounded;
     }
   }
+}
+
+void HEkkPrimal::resetCyclingDetection() {
+  // Bases visited in another phase, or with other bound perturbations,
+  // were visited with another objective or other bounds, so a return to
+  // one of them is not cycling. Not after backtracking, which marks the
+  // rank deficient basis as visited, and not when this phase has started
+  // from this basis and bound state before, so that cycling through phases
+  // is detected
+  const bool phase_changed = solve_phase != reset_phase_;
+  reset_phase_ = solve_phase;
+  if (backtracked_) {
+    backtracked_ = false;
+    // Cycling detected in another phase is not cycling in this one
+    if (phase_changed)
+      ekk_instance_.clearBadBasisChange(BadBasisChangeReason::kCycling);
+    return;
+  }
+  const HighsSimplexInfo& info = ekk_instance_.info_;
+  uint64_t phase_start = ekk_instance_.basis_.hash;
+  HighsHashHelpers::sparse_combine(
+      phase_start,
+      num_tot + 8 * solve_phase + 4 * HighsInt{info.allow_bound_perturbation} +
+          2 * HighsInt{info.bounds_shifted} + HighsInt{info.bounds_perturbed});
+  if (!phase_start_basis_.insert(phase_start)) return;
+  ekk_instance_.visited_basis_.clear();
+  ekk_instance_.visited_basis_.insert(ekk_instance_.basis_.hash);
+  ekk_instance_.previous_iteration_cycling_detected = -kHighsIInf;
+  ekk_instance_.clearBadBasisChange(BadBasisChangeReason::kCycling);
 }
 
 void HEkkPrimal::cleanup() {
