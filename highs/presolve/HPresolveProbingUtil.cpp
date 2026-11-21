@@ -204,14 +204,26 @@ HPresolve::Result HPresolve::prepareProbing(
   // than their column bound before probing this is not done for continuous
   // columns since it may allow stronger dual presolve and more aggregations
   double hugeBound = primal_feastol_decl / kHighsTiny;
+  // an implied bound that crosses the other bound within the tolerance fixes
+  // the column at that bound
   for (HighsInt i = 0; i != model->num_col_; ++i) {
     if (std::abs(implColLower[i]) <= hugeBound &&
-        implColLower[i] > model->col_lower_[i] + primal_feastol_decl)
-      HPRESOLVE_CHECKED_CALL(changeColLower(i, implColLower[i]));
+        implColLower[i] > model->col_lower_[i] + primal_feastol_decl) {
+      double newLower = implColLower[i];
+      if (newLower > model->col_upper_[i] &&
+          newLower <= model->col_upper_[i] + primal_feastol_decl)
+        newLower = model->col_upper_[i];
+      HPRESOLVE_CHECKED_CALL(changeColLower(i, newLower));
+    }
 
     if (std::abs(implColUpper[i]) <= hugeBound &&
-        implColUpper[i] < model->col_upper_[i] - primal_feastol_decl)
-      HPRESOLVE_CHECKED_CALL(changeColUpper(i, implColUpper[i]));
+        implColUpper[i] < model->col_upper_[i] - primal_feastol_decl) {
+      double newUpper = implColUpper[i];
+      if (newUpper < model->col_lower_[i] &&
+          newUpper >= model->col_lower_[i] - primal_feastol_decl)
+        newUpper = model->col_lower_[i];
+      HPRESOLVE_CHECKED_CALL(changeColUpper(i, newUpper));
+    }
   }
 
   // prepare for domain propagation

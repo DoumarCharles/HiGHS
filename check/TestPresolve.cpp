@@ -2490,3 +2490,7 @@ TEST_CASE("presolve-empty-row-sparsify", "[highs_test_presolve]") {
 TEST_CASE("presolve-impliedint-row-rounding", "[highs_test_presolve]") {
   presolveToleranceCheck("impliedint-row-rounding", 0.0);
 }
+
+TEST_CASE("presolve-probing-implied-crossing", "[highs_test_presolve]") {
+  presolveToleranceCheck("probing-implied-crossing", -1.0);
+}
