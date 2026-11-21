@@ -235,6 +235,7 @@ HighsStatus HEkkDual::solve(const bool pass_force_phase2) {
         ekk_instance_.initialiseNonbasicValueAndMove();
         // Can now forget that we might have been backtracking
         info.backtracking_ = false;
+        backtracked_ = true;
       }
     }
     assert(solve_phase == kSolvePhase1 || solve_phase == kSolvePhase2);
@@ -585,6 +586,9 @@ void HEkkDual::initialiseSolve() {
   ekk_instance_.exit_algorithm_ = SimplexAlgorithm::kDual;
 
   rebuild_reason = kRebuildReasonNo;
+  phase_start_basis_.clear();
+  backtracked_ = false;
+  reset_phase_ = kSolvePhaseUnknown;
 }
 
 void HEkkDual::solvePhase1() {
@@ -629,6 +633,7 @@ void HEkkDual::solvePhase1() {
   // Free variables are boxed in phase 1, so the list of free variables
   // created at the start of any earlier phase 2 must not be used (#2300)
   dualRow.freeList.clear();
+  resetCyclingDetection();
 
   // If there's no backtracking basis, save the initial basis in case of
   // backtracking
@@ -888,6 +893,7 @@ void HEkkDual::solvePhase2() {
               "dual-phase-2-start\n");
   // Collect free variables
   dualRow.createFreelist();
+  resetCyclingDetection();
 
   // If there's no backtracking basis, save the initial basis in case
   // of backtracking
@@ -1031,6 +1037,36 @@ void HEkkDual::solvePhase2() {
     }
   }
   return;
+}
+
+void HEkkDual::resetCyclingDetection() {
+  // Bases visited in another phase, or with other cost perturbations,
+  // were visited with other bounds or another objective, so a return to
+  // one of them is not cycling. Not after backtracking, which marks the
+  // rank deficient basis as visited, and not when this phase has started
+  // from this basis and cost state before, so that cycling through phases
+  // is detected
+  const bool phase_changed = solve_phase != reset_phase_;
+  reset_phase_ = solve_phase;
+  if (backtracked_) {
+    backtracked_ = false;
+    // Cycling detected in another phase is not cycling in this one
+    if (phase_changed)
+      ekk_instance_.clearBadBasisChange(BadBasisChangeReason::kCycling);
+    return;
+  }
+  const HighsSimplexInfo& info = ekk_instance_.info_;
+  uint64_t phase_start = ekk_instance_.basis_.hash;
+  HighsHashHelpers::sparse_combine(
+      phase_start, solver_num_tot + 8 * solve_phase +
+                       4 * HighsInt{info.allow_cost_perturbation} +
+                       2 * HighsInt{info.costs_shifted} +
+                       HighsInt{info.costs_perturbed});
+  if (!phase_start_basis_.insert(phase_start)) return;
+  ekk_instance_.visited_basis_.clear();
+  ekk_instance_.visited_basis_.insert(ekk_instance_.basis_.hash);
+  ekk_instance_.previous_iteration_cycling_detected = -kHighsIInf;
+  ekk_instance_.clearBadBasisChange(BadBasisChangeReason::kCycling);
 }
 
 void HEkkDual::rebuild() {

@@ -781,3 +781,74 @@ TEST_CASE("primal-cycling-phase-change", "[highs_lp_solver]") {
     h.resetThreadScheduler(true);
   }
 }
+
+TEST_CASE("dual-cycling-phase-change", "[highs_lp_solver]") {
+  // LP of upstream issue 3289: feasible and bounded (sum of x is 1). The
+  // dual simplex phase 2 returned to bases visited in phase 1, which was
+  // taken as cycling, and the solve ended with model status unknown
+  const HighsInt n = 1280;
+  const double pi = 3.14159265358979323846;
+  const double a[12] = {-7, -9, -16, 8, -1, 8, 9, 3, -2, 4, -5, -6};
+  std::vector<double> t(n), c(n), w(n);
+  std::vector<std::vector<double>> row(5, std::vector<double>(n));
+  for (HighsInt j = 0; j < n; j++) {
+    t[j] = 2 * pi * j / n;
+    row[0][j] = 1;
+    row[1][j] = std::cos(t[j]);
+    row[2][j] = std::sin(t[j]);
+    row[3][j] = std::cos(2 * t[j]);
+    row[4][j] = std::sin(2 * t[j]);
+    double v = 0;
+    for (HighsInt k = 1; k <= 6; k++)
+      v += a[2 * k - 2] / 16 * std::cos(k * t[j]) +
+           a[2 * k - 1] / 16 * std::sin(k * t[j]);
+    c[j] = v;
+  }
+  double c_min = c[0], c_max = c[0], w_sum = 0;
+  for (HighsInt j = 0; j < n; j++) {
+    c_min = std::min(c_min, c[j]);
+    c_max = std::max(c_max, c[j]);
+    w[j] = std::exp(3 * std::cos(t[j] - 2 * pi * 0.40154194513298813));
+    w_sum += w[j];
+  }
+  HighsLp lp;
+  lp.num_col_ = n;
+  lp.num_row_ = 5;
+  lp.col_lower_.assign(n, 0);
+  lp.col_upper_.assign(n, kHighsInf);
+  lp.row_lower_.assign(5, 0);
+  lp.a_matrix_.format_ = MatrixFormat::kColwise;
+  lp.a_matrix_.start_.clear();
+  for (HighsInt j = 0; j < n; j++) {
+    lp.col_cost_.push_back(-(c[j] - c_min) / (c_max - c_min));
+    w[j] /= w_sum;
+    lp.a_matrix_.start_.push_back(lp.a_matrix_.index_.size());
+    for (HighsInt i = 0; i < 5; i++) {
+      // Leave out the round-off values of cos and sin at multiples of
+      // pi/2, which passModel would remove with a warning
+      if (std::fabs(row[i][j]) <= 1e-9) continue;
+      lp.a_matrix_.index_.push_back(i);
+      lp.a_matrix_.value_.push_back(row[i][j]);
+    }
+  }
+  lp.a_matrix_.start_.push_back(lp.a_matrix_.index_.size());
+  for (HighsInt i = 0; i < 5; i++)
+    for (HighsInt j = 0; j < n; j++) lp.row_lower_[i] += row[i][j] * w[j];
+  lp.row_upper_ = lp.row_lower_;
+  Highs h;
+  h.setOptionValue("output_flag", dev_run);
+  h.setOptionValue("solver", kSimplexString);
+  h.setOptionValue("simplex_strategy", kSimplexStrategyDual);
+  h.setOptionValue("simplex_scale_strategy", 1);
+  h.setOptionValue("parallel", kHighsOffString);
+  h.setOptionValue("presolve", kHighsOffString);
+  h.setOptionValue("primal_feasibility_tolerance", 1e-10);
+  h.setOptionValue("dual_feasibility_tolerance", 1e-10);
+  h.setOptionValue("simplex_iteration_limit", 1000);
+  REQUIRE(h.passModel(lp) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kOptimal);
+  REQUIRE(std::fabs(h.getInfo().objective_function_value + 0.53164328324541) <
+          1e-9);
+  h.resetThreadScheduler(true);
+}

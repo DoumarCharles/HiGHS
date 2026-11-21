@@ -94,6 +94,8 @@ class HEkkDual {
    */
   void solvePhase2();
 
+  void resetCyclingDetection();
+
   /**
    * @brief Reinvert if INVERT not fresh, then recompute dual and primal values
    *
@@ -422,6 +424,9 @@ class HEkkDual {
   HighsInt solve_phase;
   HighsInt rebuild_reason;
   HighsInt num_exact_objective_bound_call_;
+  HighsHashTable<uint64_t> phase_start_basis_;
+  bool backtracked_;
+  HighsInt reset_phase_;
 
   HVector row_ep;
   HVector row_ap;
