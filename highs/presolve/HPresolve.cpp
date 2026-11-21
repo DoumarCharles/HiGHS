@@ -2161,12 +2161,12 @@ void HPresolve::scaleStoredRow(HighsInt row, double scale, bool integral) {
   }
 
   if (integral) {
+    // rounding tolerance in units of the unscaled row
+    const double tol = primal_feastol_decl * std::max(1.0, std::abs(scale));
     if (model->row_upper_[row] != kHighsInf)
-      model->row_upper_[row] =
-          std::floor(model->row_upper_[row] + primal_feastol_decl);
+      model->row_upper_[row] = std::floor(model->row_upper_[row] + tol);
     if (model->row_lower_[row] != -kHighsInf)
-      model->row_lower_[row] =
-          std::ceil(model->row_lower_[row] - primal_feastol_decl);
+      model->row_lower_[row] = std::ceil(model->row_lower_[row] - tol);
   }
 }
 
@@ -2923,7 +2923,7 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
 
           if (intScale != 0.0 && intScale <= 1e3) {
             double rhs = rowUpper * intScale;
-            if (fractionality(rhs) > primal_feastol_decl)
+            if (fractionality(rhs) > primal_feastol_decl * std::max(1.0, intScale))
               return Result::kPrimalInfeasible;
 
             rhs = std::round(rhs);
@@ -3051,7 +3051,9 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
                             HighsCDouble& fractionRhs, double minRhsTightening,
                             bool& rhsTightened, HighsInt direction) {
           // round rhs
-          roundedRhs = direction * floor(direction * rhs + primal_feastol_decl);
+          roundedRhs = direction * floor(direction * rhs +
+                                         primal_feastol_decl *
+                                             std::max(1.0, std::abs(intScale)));
           // compute fractional part
           fractionRhs = direction * (rhs - roundedRhs);
           // check if tightened
@@ -3276,7 +3278,8 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
             bool accept = false;
             // round rhs (using feasibility tolerance)
             HighsCDouble scalar = static_cast<HighsCDouble>(s);
-            roundedRhs = ceil(rhs * scalar - primal_feastol_decl);
+            roundedRhs =
+                ceil(rhs * scalar - primal_feastol_decl * std::max(1.0, s));
             if (roundedRhs <= primal_feastol) return false;
             HighsCDouble rhsRatio = rhs / roundedRhs;
 
