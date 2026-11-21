@@ -89,10 +89,10 @@ HPresolve::Result HPresolve::normaliseCliqueRows(
     double lhs = -kHighsInf;
     double rhs = kHighsInf;
     if (impliedRowBounds.getSumLower(row) <
-        model->row_lower_[row] - primal_feastol)
+        model->row_lower_[row] - primal_feastol_decl)
       lhs = model->row_lower_[row];
     if (impliedRowBounds.getSumUpper(row) >
-        model->row_upper_[row] + primal_feastol)
+        model->row_upper_[row] + primal_feastol_decl)
       rhs = model->row_upper_[row];
 
     // transform row
@@ -105,9 +105,9 @@ HPresolve::Result HPresolve::normaliseCliqueRows(
     rhs *= direction * intScale;
     if (direction < 0) std::swap(lhs, rhs);
     if (lhs > -kHighsInf)
-      lhs = static_cast<double>(ceil(lhs - update - primal_feastol));
+      lhs = static_cast<double>(ceil(lhs - update - primal_feastol_decl));
     if (rhs < kHighsInf)
-      rhs = static_cast<double>(floor(rhs - update + primal_feastol));
+      rhs = static_cast<double>(floor(rhs - update + primal_feastol_decl));
 
     // equation?
     bool equation = rhs == lhs;
@@ -128,7 +128,7 @@ HPresolve::Result HPresolve::normaliseCliqueRows(
     // in the complemented space
     HighsInt start = 0;
     for (HighsInt j = 0; j < numBin; ++j) {
-      if (nzs[perm[j]].value <= rhs + primal_feastol) break;
+      if (nzs[perm[j]].value <= rhs + primal_feastol_decl) break;
       HighsInt col = nzs[perm[j]].index;
       if (nzs[perm[j]].complementation == -1)
         HPRESOLVE_CHECKED_CALL(fixColToUpper(postsolve_stack, col));
@@ -141,7 +141,7 @@ HPresolve::Result HPresolve::normaliseCliqueRows(
     // remaining coefficients do not form a clique
     if (numBin - start < 2 ||
         nzs[perm[numBin - 2]].value + nzs[perm[numBin - 1]].value <=
-            rhs + primal_feastol)
+            rhs + primal_feastol_decl)
       continue;
 
     // for equations, normalisation to x1 + ... + xn = 1 is only valid
@@ -203,15 +203,27 @@ HPresolve::Result HPresolve::prepareProbing(
   // first tighten all bounds if they have an implied bound that is tighter
   // than their column bound before probing this is not done for continuous
   // columns since it may allow stronger dual presolve and more aggregations
-  double hugeBound = primal_feastol / kHighsTiny;
+  double hugeBound = primal_feastol_decl / kHighsTiny;
+  // an implied bound that crosses the other bound within the tolerance fixes
+  // the column at that bound
   for (HighsInt i = 0; i != model->num_col_; ++i) {
     if (std::abs(implColLower[i]) <= hugeBound &&
-        implColLower[i] > model->col_lower_[i])
-      HPRESOLVE_CHECKED_CALL(changeColLower(i, implColLower[i]));
+        implColLower[i] > model->col_lower_[i] + primal_feastol_decl) {
+      double newLower = implColLower[i];
+      if (newLower > model->col_upper_[i] &&
+          newLower <= model->col_upper_[i] + primal_feastol_decl)
+        newLower = model->col_upper_[i];
+      HPRESOLVE_CHECKED_CALL(changeColLower(i, newLower));
+    }
 
     if (std::abs(implColUpper[i]) <= hugeBound &&
-        implColUpper[i] < model->col_upper_[i])
-      HPRESOLVE_CHECKED_CALL(changeColUpper(i, implColUpper[i]));
+        implColUpper[i] < model->col_upper_[i] - primal_feastol_decl) {
+      double newUpper = implColUpper[i];
+      if (newUpper < model->col_lower_[i] &&
+          newUpper >= model->col_lower_[i] - primal_feastol_decl)
+        newUpper = model->col_lower_[i];
+      HPRESOLVE_CHECKED_CALL(changeColUpper(i, newUpper));
+    }
   }
 
   // prepare for domain propagation

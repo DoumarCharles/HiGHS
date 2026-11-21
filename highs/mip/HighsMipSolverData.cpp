@@ -1983,7 +1983,10 @@ HighsLpRelaxation::Status HighsMipSolverData::evaluateRootLp(
           addIncumbent(getLp().getLpSolver().getSolution().col_value,
                        getLp().getObjective(), kSolutionSourceEvaluateNode)) {
         mipsolver.modelstatus_ = HighsModelStatus::kOptimal;
-        updateLowerBound(upper_bound);
+        // the stored incumbent can be worse than the LP solution (repaired
+        // in the original space): then only the LP objective is proven
+        const double lpobj = getLp().getObjective();
+        updateLowerBound(upper_bound - lpobj > feastol ? lpobj : upper_bound);
         pruned_treeweight = 1.0;
         num_nodes += 1;
         num_leaves += 1;

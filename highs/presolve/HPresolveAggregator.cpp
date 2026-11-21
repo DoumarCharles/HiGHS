@@ -229,10 +229,16 @@ void HPresolve::substitute(HighsInt row, HighsInt col, double rhs) {
       // printf("changing col cost to %g = %g + %g * %g\n",
       // double(model->col_cost_[Acol[rowiter]] + objscale * Avalue[rowiter]),
       // model->col_cost_[Acol[rowiter]], double(objscale), Avalue[rowiter]);
-      model->col_cost_[Acol[rowiter]] = static_cast<double>(
-          model->col_cost_[Acol[rowiter]] + objscale * Avalue[rowiter]);
-      if (std::abs(model->col_cost_[Acol[rowiter]]) <=
-          options->small_matrix_value)
+      const double oldCost = model->col_cost_[Acol[rowiter]];
+      model->col_cost_[Acol[rowiter]] =
+          static_cast<double>(oldCost + objscale * Avalue[rowiter]);
+      // for a MIP only a cost that cancelled up to round-off is dropped: a
+      // dropped cost is multiplied by the column value
+      const double dropTol =
+          mipsolver != nullptr
+              ? 4 * std::numeric_limits<double>::epsilon() * std::fabs(oldCost)
+              : options->small_matrix_value;
+      if (std::abs(model->col_cost_[Acol[rowiter]]) <= dropTol)
         model->col_cost_[Acol[rowiter]] = 0.0;
     }
     assert(std::abs(model->col_cost_[col]) <=

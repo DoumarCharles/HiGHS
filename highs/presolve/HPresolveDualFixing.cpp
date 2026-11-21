@@ -235,7 +235,7 @@ HPresolve::Result HPresolve::dualFixing(HighsPostsolveStack& postsolve_stack,
     if (direction * model->col_cost_[col] < 0) return false;
 
     // do not accept huge bounds
-    double hugeBound = primal_feastol / kHighsTiny;
+    double hugeBound = primal_feastol_decl / kHighsTiny;
 
     // compute worst-case bounds (direction = 1: lower bound,
     // direction = -1: upper bound)

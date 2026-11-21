@@ -173,7 +173,8 @@ bool HighsTransformedLp::transform(std::vector<double>& vals,
     double ub = getUb(col);
 
     if (ub - lb < mip.options_mip_->small_matrix_value) {
-      tmpRhs -= std::min(lb, ub) * vals[i];
+      // row is <=: the bound that relaxes it depends on the coefficient's sign
+      tmpRhs -= (vals[i] > 0 ? std::min(lb, ub) : std::max(lb, ub)) * vals[i];
       remove(i);
       continue;
     }

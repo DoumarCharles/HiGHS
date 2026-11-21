@@ -40,7 +40,7 @@ HPresolve::StatusResult HPresolve::isImpliedIntegral(HighsInt col) {
 
       if (!rowCoefficientsIntegral(nz.index(), scale)) continue;
 
-      if (fractionality(rowLower * scale) > primal_feastol)
+      if (fractionality(rowLower * scale) > primal_feastol_decl)
         return StatusResult(Result::kPrimalInfeasible);
 
       return StatusResult(true);
@@ -58,7 +58,7 @@ HPresolve::StatusResult HPresolve::isImpliedIntegral(HighsInt col) {
       double rUpper =
           std::abs(nz.value()) *
           std::floor(model->row_upper_[nz.index()] * std::abs(scale) +
-                     primal_feastol);
+                     primal_feastol_decl * std::abs(scale));
       // check if modification is large enough
       if (std::abs(model->row_upper_[nz.index()] - rUpper) >
           options->small_matrix_value)
@@ -69,7 +69,7 @@ HPresolve::StatusResult HPresolve::isImpliedIntegral(HighsInt col) {
       double rLower =
           std::abs(nz.value()) *
           std::ceil(model->row_lower_[nz.index()] * std::abs(scale) -
-                    primal_feastol);
+                    primal_feastol_decl * std::abs(scale));
       // check if modification is large enough
       if (std::abs(model->row_lower_[nz.index()] - rLower) >
           options->small_matrix_value)

@@ -398,7 +398,7 @@ HPresolve::Result HPresolve::liftingForProbing(
     if (candidates.size() > 1) {
       // compute cliques
       auto cliques =
-          cliquetable.computeMaximalCliques(candidates, primal_feastol);
+          cliquetable.computeMaximalCliques(candidates, primal_feastol_decl);
 
       // identify clique with highest score
       for (const auto& clique : cliques) {

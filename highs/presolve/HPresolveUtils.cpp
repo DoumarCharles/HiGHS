@@ -22,8 +22,9 @@ PresolveProbingScope::~PresolveProbingScope() {
 
 SingletonRowResult computeSingletonRowBounds(
     double val, double rowLower, double rowUpper, double colLower,
-    double colUpper, double primalFeastol, double maxAbsColVal, bool isIntegral,
-    double& lb, double& ub, bool& lowerTightened, bool& upperTightened) {
+    double colUpper, double primalFeastol, double primalFeastolDecl,
+    double maxAbsColVal, bool isIntegral, double& lb, double& ub,
+    bool& lowerTightened, bool& upperTightened) {
   if (val > 0) {
     if (colUpper * val <= rowUpper + primalFeastol &&
         colLower * val >= rowLower - primalFeastol)
@@ -49,25 +50,32 @@ SingletonRowResult computeSingletonRowBounds(
   const double boundTol = std::max(primalFeastol / std::max(1.0, std::abs(val)),
                                    std::numeric_limits<double>::epsilon());
 
+  // integer rounding uses the tolerance of the infeasibility declaration, in
+  // the units of the column
+  const double roundTol =
+      std::max(primalFeastolDecl / std::max(1.0, std::abs(val)),
+               std::numeric_limits<double>::epsilon());
+
   lowerTightened = newColLower > colLower + boundTol;
   upperTightened = newColUpper < colUpper - boundTol;
 
-  if (lowerTightened) {
-    if (isIntegral) newColLower = std::ceil(newColLower - boundTol);
-    lb = newColLower;
-  } else
-    lb = colLower;
+  if (lowerTightened && isIntegral) {
+    newColLower = std::ceil(newColLower - roundTol);
+    lowerTightened = newColLower > colLower;
+  }
+  lb = lowerTightened ? newColLower : colLower;
 
-  if (upperTightened) {
-    if (isIntegral) newColUpper = std::floor(newColUpper + boundTol);
-    ub = newColUpper;
-  } else
-    ub = colUpper;
+  if (upperTightened && isIntegral) {
+    newColUpper = std::floor(newColUpper + roundTol);
+    upperTightened = newColUpper < colUpper;
+  }
+  ub = upperTightened ? newColUpper : colUpper;
 
   // check whether the bounds are equal in tolerances
   if (ub <= lb + primalFeastol) {
     // bounds could be infeasible or equal in tolerances, first check infeasible
-    if (ub < lb - primalFeastol) return SingletonRowResult::kPrimalInfeasible;
+    if (ub < lb - primalFeastolDecl)
+      return SingletonRowResult::kPrimalInfeasible;
 
     // bounds are equal in tolerances, if they have a slight infeasibility below
     // those tolerances or they have a slight numerical distance which changes
