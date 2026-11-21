@@ -2506,3 +2506,8 @@ TEST_CASE("presolve-relaxed-col-bound", "[highs_test_presolve]") {
 TEST_CASE("presolve-singleton-strict-dual", "[highs_test_presolve]") {
   presolveToleranceCheck("singleton-strict-dual", 1.1920928955078125e-07, 1e-9);
 }
+
+TEST_CASE("presolve-scaled-solution-repair", "[highs_test_presolve]") {
+  // presolve off: 9.1751417e-06
+  presolveToleranceCheck("scaled-solution-repair", 9.5367431640625e-06, 1e-6);
+}

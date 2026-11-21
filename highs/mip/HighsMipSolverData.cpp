@@ -1290,13 +1290,31 @@ try_again:
     // HiPO or IPX to solve an LP without a basis, use simplex
     tmpSolver.setOptionValue("solver", kSimplexString);
     tmpSolver.optimizeLp();
-    if (use_presolve &&
-        tmpSolver.getModelStatus() == HighsModelStatus::kSolveError) {
+    const HighsModelStatus repair_status = tmpSolver.getModelStatus();
+    // Without a feasible point, only a verdict on the LP or a spent
+    // budget is final: otherwise solve again without presolve
+    const bool repair_final =
+        tmpSolver.getInfo().primal_solution_status == kSolutionStatusFeasible ||
+        repair_status == HighsModelStatus::kInfeasible ||
+        repair_status == HighsModelStatus::kUnbounded ||
+        repair_status == HighsModelStatus::kTimeLimit ||
+        repair_status == HighsModelStatus::kInterrupt ||
+        repair_status == HighsModelStatus::kHighsInterrupt ||
+        repair_status == HighsModelStatus::kMemoryLimit;
+    if (use_presolve && !repair_final) {
+      this->total_repair_lp_iterations +=
+          std::max(tmpSolver.getInfo().simplex_iteration_count, HighsInt{0});
+      tmpSolver.clearSolver();
+      // The run clock of tmpSolver includes the first solve
+      time_available = std::max(
+          mipsolver.options_mip_->time_limit - mipsolver.timer_.read(), 0.1);
+      tmpSolver.setOptionValue("time_limit",
+                               tmpSolver.getRunTime() + time_available);
       tmpSolver.setOptionValue("presolve", kHighsOffString);
       tmpSolver.optimizeLp();
     }
     this->total_repair_lp_iterations +=
-        tmpSolver.getInfo().simplex_iteration_count;
+        std::max(tmpSolver.getInfo().simplex_iteration_count, HighsInt{0});
     if (tmpSolver.getInfo().primal_solution_status == kSolutionStatusFeasible) {
       this->total_repair_lp_feasible++;
       solution = tmpSolver.getSolution();
