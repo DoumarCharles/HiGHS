@@ -394,7 +394,9 @@ void HEkkPrimal::initialiseSolve() {
 
   rebuild_reason = kRebuildReasonNo;
   phase_start_basis_.clear();
+  cost_change_basis_.clear();
   backtracked_ = false;
+  phase_after_backtrack_ = false;
   reset_phase_ = kSolvePhaseUnknown;
   if (!ekk_instance_.status_.has_dual_steepest_edge_weights) {
     // No dual weights to maintain, so ensure that the vectors are
@@ -660,6 +662,9 @@ void HEkkPrimal::resetCyclingDetection() {
   // is detected
   const bool phase_changed = solve_phase != reset_phase_;
   reset_phase_ = solve_phase;
+  // Phase 1 cost changes also keep the rank deficient basis marked until
+  // the next phase start without backtracking
+  phase_after_backtrack_ = backtracked_;
   if (backtracked_) {
     backtracked_ = false;
     // Cycling detected in another phase is not cycling in this one
@@ -676,6 +681,25 @@ void HEkkPrimal::resetCyclingDetection() {
   if (!phase_start_basis_.insert(phase_start)) return;
   ekk_instance_.visited_basis_.clear();
   ekk_instance_.visited_basis_.insert(ekk_instance_.basis_.hash);
+  ekk_instance_.previous_iteration_cycling_detected = -kHighsIInf;
+  ekk_instance_.clearBadBasisChange(BadBasisChangeReason::kCycling);
+}
+
+void HEkkPrimal::costChangeResetCyclingDetection(uint64_t cost_change) {
+  // Bases visited with other phase 1 costs were visited with another
+  // objective, so a return to one of them is not cycling. Not after
+  // backtracking, and not when this basis change has given these cost
+  // changes before, so that cycling through cost changes is detected.
+  // cost_change is the hash of the basis and of the basic variables whose
+  // feasibility has changed
+  if (phase_after_backtrack_) return;
+  HighsHashHelpers::sparse_combine(cost_change, variable_in, 4);
+  HighsHashHelpers::sparse_combine(cost_change, variable_out, 5);
+  if (!cost_change_basis_.insert(cost_change)) return;
+  ekk_instance_.visited_basis_.clear();
+  // After a bound flip the basis is unchanged
+  if (row_out < 0)
+    ekk_instance_.visited_basis_.insert(ekk_instance_.basis_.hash);
   ekk_instance_.previous_iteration_cycling_detected = -kHighsIInf;
   ekk_instance_.clearBadBasisChange(BadBasisChangeReason::kCycling);
 }
@@ -1889,6 +1913,7 @@ void HEkkPrimal::phase1UpdatePrimal() {
   // Determine the base value for cost perturbation
   const double base =
       info.primal_simplex_phase1_cost_perturbation_multiplier * 5e-7;
+  uint64_t cost_change = ekk_instance_.basis_.hash;
   //  if (ekk_instance_.sparseLoopStyle(col_aq.count, num_row, to_entry)) {
   for (HighsInt iEl = 0; iEl < col_aq.count; iEl++) {
     HighsInt iRow = col_aq.index[iEl];
@@ -1918,8 +1943,11 @@ void HEkkPrimal::phase1UpdatePrimal() {
       col_basic_feasibility_change.index[col_basic_feasibility_change.count++] =
           iRow;
       if (iCol >= num_col) info.workDual_[iCol] += delta_cost;
+      HighsHashHelpers::sparse_combine(cost_change, iCol, 2 + bound_violated);
     }
   }
+  if (col_basic_feasibility_change.count)
+    costChangeResetCyclingDetection(cost_change);
   // Don't set baseValue[row_out] yet so that dual update due to
   // feasibility changes is done correctly
   ekk_instance_.invalidatePrimalMaxSumInfeasibilityRecord();

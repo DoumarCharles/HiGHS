@@ -852,3 +852,32 @@ TEST_CASE("dual-cycling-phase-change", "[highs_lp_solver]") {
           1e-9);
   h.resetThreadScheduler(true);
 }
+
+TEST_CASE("primal-cycling-phase1-cost-change", "[highs_lp_solver]") {
+  // Infeasible: x3 = 2 and row 1 give x1 = 3.5 > 3. The primal simplex
+  // phase 1 returned to a basis visited before basic variables became
+  // feasible, so with other phase 1 costs, which was taken as cycling, and
+  // the solve ended with model status unknown
+  HighsLp lp;
+  lp.num_col_ = 5;
+  lp.num_row_ = 4;
+  lp.sense_ = ObjSense::kMaximize;
+  lp.col_cost_ = {3, 0, 0, 0, 0};
+  lp.col_lower_ = {-4, -2, 1, 2, -kHighsInf};
+  lp.col_upper_ = {kHighsInf, 3, 5, 2, 4};
+  lp.row_lower_ = {8, 3, 8.5, -kHighsInf};
+  lp.row_upper_ = {10, 3, kHighsInf, 1.5};
+  lp.a_matrix_.format_ = MatrixFormat::kColwise;
+  lp.a_matrix_.start_ = {0, 0, 3, 5, 6, 7};
+  lp.a_matrix_.index_ = {1, 2, 3, 0, 2, 1, 0};
+  lp.a_matrix_.value_ = {2, -1, -3, 1, 0.5, -2, 1};
+  for (const std::string presolve : {kHighsOnString, kHighsOffString}) {
+    Highs h;
+    h.setOptionValue("output_flag", dev_run);
+    h.setOptionValue("presolve", presolve);
+    REQUIRE(h.passModel(lp) == HighsStatus::kOk);
+    REQUIRE(h.run() == HighsStatus::kOk);
+    REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
+    h.resetThreadScheduler(true);
+  }
+}

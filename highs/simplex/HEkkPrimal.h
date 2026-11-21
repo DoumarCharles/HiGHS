@@ -45,6 +45,7 @@ class HEkkPrimal {
   void solvePhase2();
   void cleanup();
   void resetCyclingDetection();
+  void costChangeResetCyclingDetection(uint64_t cost_change);
   void rebuild();
 
   void iterate();
@@ -155,7 +156,9 @@ class HEkkPrimal {
   HighsInt num_free_col;
   HSet nonbasic_free_col_set;
   HighsHashTable<uint64_t> phase_start_basis_;
+  HighsHashTable<uint64_t> cost_change_basis_;
   bool backtracked_;
+  bool phase_after_backtrack_;
   HighsInt reset_phase_;
   // Hyper-sparse CHUZC data
   bool use_hyper_chuzc = false;
