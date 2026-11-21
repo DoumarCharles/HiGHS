@@ -1950,13 +1950,17 @@ HighsStatus Highs::calledOptimizeModel() {
         options_ = save_options;
         // Primal simplex doesn't necessarily resolve the
         // kUnboundedOrInfeasible case, as it may time out or reach
-        // the iteration count (#3383), or even fail
-        assert(model_status_ == HighsModelStatus::kInfeasible ||
+        // the iteration count (#3383), or even fail. It may also find
+        // the LP optimal, when presolve's unbounded ray improves the
+        // objective by less than the dual feasibility tolerance
+        assert(model_status_ == HighsModelStatus::kOptimal ||
+               model_status_ == HighsModelStatus::kInfeasible ||
                model_status_ == HighsModelStatus::kUnbounded ||
                model_status_ == HighsModelStatus::kTimeLimit ||
                model_status_ == HighsModelStatus::kIterationLimit ||
                model_status_ == HighsModelStatus::kInterrupt);
-        const bool resolved = model_status_ == HighsModelStatus::kInfeasible ||
+        const bool resolved = model_status_ == HighsModelStatus::kOptimal ||
+                              model_status_ == HighsModelStatus::kInfeasible ||
                               model_status_ == HighsModelStatus::kUnbounded;
         if (resolved) {
           info_.valid = true;

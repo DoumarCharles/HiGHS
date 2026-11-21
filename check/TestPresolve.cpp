@@ -2515,3 +2515,29 @@ TEST_CASE("presolve-scaled-solution-repair", "[highs_test_presolve]") {
 TEST_CASE("presolve-rejected-leaf-solution", "[highs_test_presolve]") {
   presolveToleranceCheck("rejected-leaf-solution", -1.99900945, 1e-6);
 }
+
+TEST_CASE("presolve-unbounded-or-infeasible-optimal", "[highs_test_presolve]") {
+  // Presolve finds a ray that improves the objective by less than the dual
+  // feasibility tolerance; the primal simplex fallback finds the LP optimal
+  HighsLp lp;
+  lp.num_col_ = 3;
+  lp.num_row_ = 1;
+  lp.col_cost_ = {0, 1, 0.24999995};
+  lp.col_lower_ = {0, -kHighsInf, 0};
+  lp.col_upper_ = {kHighsInf, 1, kHighsInf};
+  lp.row_lower_ = {-1};
+  lp.row_upper_ = {-1};
+  lp.a_matrix_.format_ = MatrixFormat::kColwise;
+  lp.a_matrix_.start_ = {0, 1, 2, 3};
+  lp.a_matrix_.index_ = {0, 0, 0};
+  lp.a_matrix_.value_ = {1, -1, -0.25};
+  for (const std::string presolve : {kHighsOnString, kHighsOffString}) {
+    Highs h;
+    h.setOptionValue("output_flag", dev_run);
+    h.setOptionValue("presolve", presolve);
+    REQUIRE(h.passModel(lp) == HighsStatus::kOk);
+    REQUIRE(h.run() == HighsStatus::kOk);
+    REQUIRE(h.getModelStatus() == HighsModelStatus::kOptimal);
+    REQUIRE(std::fabs(h.getInfo().objective_function_value - 1) <= 1e-9);
+  }
+}
