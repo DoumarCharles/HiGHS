@@ -275,8 +275,13 @@ bool HPresolve::isStrictlyImpliedForDual(HighsInt col,
   // the rows; then the bound is never active, the reduced cost of the column
   // cannot be positive (negative), and the dual constraint of the column has
   // the side sum_i a_ij y_i >= (<=) c_j. for singleton columns, a bound that
-  // is implied within the primal feasibility tolerance suffices.
-  double impliedMargin = colsize[col] != 1 ? primal_feastol : -primal_feastol;
+  // is implied exactly suffices.
+  if (colsize[col] == 1)
+    return isLowerBound ? (model->col_lower_[col] == -kHighsInf ||
+                           implColLower[col] >= model->col_lower_[col])
+                        : (model->col_upper_[col] == kHighsInf ||
+                           implColUpper[col] <= model->col_upper_[col]);
+  double impliedMargin = primal_feastol;
   return isLowerBound ? isLowerStrictlyImplied(col, &impliedMargin)
                       : isUpperStrictlyImplied(col, &impliedMargin);
 }
