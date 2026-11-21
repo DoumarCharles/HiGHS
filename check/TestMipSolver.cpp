@@ -2843,3 +2843,31 @@ TEST_CASE("issue-3573", "[highs_test_mip_solver]") {
 
   h.resetThreadScheduler(true);
 }
+
+TEST_CASE("issue-3629", "[highs_test_mip_solver]") {
+  // With the doubleton equation rule off, sparsify met an equation left
+  // with one nonzero and read the column vector of column -1
+  HighsLp lp;
+  lp.num_col_ = 4;
+  lp.num_row_ = 3;
+  lp.col_cost_ = {-1, 0, 0, 0};
+  lp.col_lower_ = {-kHighsInf, 0, 0, -kHighsInf};
+  lp.col_upper_ = {-3, 1, kHighsInf, kHighsInf};
+  lp.integrality_ = {HighsVarType::kContinuous, HighsVarType::kInteger,
+                     HighsVarType::kInteger, HighsVarType::kContinuous};
+  lp.row_lower_ = {1.25, 1.25, -0.25};
+  lp.row_upper_ = {1.25, 1.25, -0.25};
+  lp.a_matrix_.format_ = MatrixFormat::kColwise;
+  lp.a_matrix_.start_ = {0, 3, 6, 9, 11};
+  lp.a_matrix_.index_ = {0, 1, 2, 0, 1, 2, 0, 1, 2, 1, 2};
+  lp.a_matrix_.value_ = {-0.25, -0.25, 0.25, -0.25, -0.25, 0.25,
+                         0.25,  -0.25, -0.5, 0.5,   0.75};
+  Highs h;
+  h.setOptionValue("output_flag", dev_run);
+  h.setOptionValue("presolve_rule_off", 512);
+  REQUIRE(h.passModel(lp) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kOptimal);
+  REQUIRE(std::fabs(h.getInfo().objective_function_value - 3) < 1e-9);
+  h.resetThreadScheduler(true);
+}

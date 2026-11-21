@@ -49,6 +49,7 @@ HPresolve::Result HPresolve::sparsify(HighsPostsolveStack& postsolve_stack) {
       }
     }
 
+    if (secondSparsestCol == -1) continue;
     assert(sparsestCol != -1 && secondSparsestCol != -1);
     assert(colsize[sparsestCol] <= colsize[secondSparsestCol]);
 
