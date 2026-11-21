@@ -735,7 +735,7 @@ void HighsDomain::DualFixProbingPropagation::updateRhsRedundant(HighsInt row) {
       mipsolver->model_->row_upper_[row] == kHighsInf)
     return;
 
-  if (domain->isRowUpperRedundant(row)) {
+  if (domain->activitymax_[row] <= mipsolver->model_->row_upper_[row]) {
     redundantRowInds_.push_back(idx);
     redundantRowFlags_[idx] = 1;
     if (!isEnabled()) ++numGlobalRedundantRows_;
@@ -748,7 +748,7 @@ void HighsDomain::DualFixProbingPropagation::updateLhsRedundant(HighsInt row) {
       mipsolver->model_->row_lower_[row] == -kHighsInf)
     return;
 
-  if (domain->isRowLowerRedundant(row)) {
+  if (domain->activitymin_[row] >= mipsolver->model_->row_lower_[row]) {
     redundantRowInds_.push_back(idx);
     redundantRowFlags_[idx] = 1;
     if (!isEnabled()) ++numGlobalRedundantRows_;
