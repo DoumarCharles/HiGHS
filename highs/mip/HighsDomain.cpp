@@ -1614,7 +1614,7 @@ double HighsDomain::adjustedUb(HighsInt col, HighsCDouble boundVal,
     accept = bound < col_upper_[col] &&
              col_upper_[col] - bound > 1000.0 * feastol() * std::fabs(bound);
   } else {
-    if (abs(boundVal - col_lower_[col]) <= epsilon())
+    if (boundVal <= col_lower_[col] && col_lower_[col] - boundVal <= epsilon())
       bound = col_lower_[col];
     else
       bound = static_cast<double>(boundVal);
@@ -1644,7 +1644,7 @@ double HighsDomain::adjustedLb(HighsInt col, HighsCDouble boundVal,
     accept = bound > col_lower_[col] &&
              bound - col_lower_[col] > 1000.0 * feastol() * std::fabs(bound);
   } else {
-    if (abs(col_upper_[col] - boundVal) <= epsilon())
+    if (boundVal >= col_upper_[col] && boundVal - col_upper_[col] <= epsilon())
       bound = col_upper_[col];
     else
       bound = static_cast<double>(boundVal);
