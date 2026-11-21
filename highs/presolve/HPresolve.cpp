@@ -1822,9 +1822,11 @@ HPresolve::Result HPresolve::scaleMIP(HighsPostsolveStack& postsolve_stack) {
     storeRow(i);
 
     double maxAbsVal = 0.0;
+    double minAbsVal = kHighsInf;
 
     for (size_t j = 0; j < rowpositions.size(); ++j) {
       HighsInt nzPos = rowpositions[j];
+      minAbsVal = std::min(std::abs(Avalue[nzPos]), minAbsVal);
       if (model->integrality_[Acol[nzPos]] != HighsVarType::kContinuous)
         continue;
 
@@ -1835,6 +1837,8 @@ HPresolve::Result HPresolve::scaleMIP(HighsPostsolveStack& postsolve_stack) {
 
     double scale = std::exp2(std::round(-std::log2(maxAbsVal)));
     if (scale == 1.0) continue;
+    // scaling must not turn a coefficient into one that is dropped
+    if (minAbsVal * scale <= options->small_matrix_value) continue;
 
     if (model->row_upper_[i] == kHighsInf) scale = -scale;
 
@@ -1847,13 +1851,16 @@ HPresolve::Result HPresolve::scaleMIP(HighsPostsolveStack& postsolve_stack) {
       continue;
 
     double maxAbsVal = 0;
+    double minAbsVal = kHighsInf;
 
     for (const HighsSliceNonzero& nonz : getColumnVector(i)) {
       maxAbsVal = std::max(std::abs(nonz.value()), maxAbsVal);
+      minAbsVal = std::min(std::abs(nonz.value()), minAbsVal);
     }
 
     double scale = std::exp2(std::round(-std::log2(maxAbsVal)));
     if (scale == 1.0) continue;
+    if (minAbsVal * scale <= options->small_matrix_value) continue;
 
     HPRESOLVE_CHECKED_CALL(transformColumn(postsolve_stack, i, scale, 0.0));
   }
