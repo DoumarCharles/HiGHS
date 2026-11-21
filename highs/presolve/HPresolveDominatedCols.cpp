@@ -97,7 +97,8 @@ HPresolve::Result HPresolve::dominatedColumns(
 
   // for a MIP coefficients and costs are compared exactly: a difference is
   // multiplied by the column value in the bounds derived from the domination
-  const double domTol = mipsolver != nullptr ? 0.0 : options->small_matrix_value;
+  const double domTol =
+      mipsolver != nullptr ? 0.0 : options->small_matrix_value;
 
   auto checkDominationNonZero = [&](HighsInt row, double aj, double ak) {
     if (isRanged(row)) {
@@ -153,8 +154,7 @@ HPresolve::Result HPresolve::dominatedColumns(
 
     // the dominating columns cost must be smaller or equal to the dominated
     // columns cost
-    if (scalj * model->col_cost_[j] >
-        scalk * model->col_cost_[k] + domTol)
+    if (scalj * model->col_cost_[j] > scalk * model->col_cost_[k] + domTol)
       return false;
 
     // finally check the column vectors

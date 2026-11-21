@@ -337,7 +337,8 @@ HPresolve::Result HPresolve::fourierMotzkin(
     double upper = upperFinite ? static_cast<double>(impliedUpper) : kHighsInf;
 
     // check for infeasibility
-    if (lower > nr.upper + primal_feastol_decl) return Result::kPrimalInfeasible;
+    if (lower > nr.upper + primal_feastol_decl)
+      return Result::kPrimalInfeasible;
 
     // check for redundancy
     isRedundant = upper <= nr.upper + primal_feastol;

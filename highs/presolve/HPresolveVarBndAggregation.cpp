@@ -269,7 +269,8 @@ void HPresolve::aggregateVarBounds() {
             // merging would add nonzeros
             size_t numOrigins = 0;
             for (const auto& var : clique) {
-              HighsInt currentrow = boundsMap.find(var.col)->originalBound.origin;
+              HighsInt currentrow =
+                  boundsMap.find(var.col)->originalBound.origin;
               if (currentrow >= 0 && !rowConsumed[currentrow]) numOrigins++;
             }
             if (clique.size() + 1 > 2 * numOrigins) continue;

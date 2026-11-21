@@ -139,9 +139,8 @@ HPresolveInitialSweep::Result HPresolveInitialSweep::singletonRow(
   SingletonRowResult sr = computeSingletonRowBounds(
       val, lp_.row_lower_[row], lp_.row_upper_[row], lp_.col_lower_[col],
       lp_.col_upper_[col], primal_feastol_, primal_feastol_decl_,
-      getMaxAbsColVal(col),
-      lp_.integrality_[col] != HighsVarType::kContinuous, lb, ub,
-      lowerTightened, upperTightened);
+      getMaxAbsColVal(col), lp_.integrality_[col] != HighsVarType::kContinuous,
+      lb, ub, lowerTightened, upperTightened);
   if (sr == SingletonRowResult::kRedundant) {
     postsolve_stack.redundantRow(row);
     return Result::kOk;

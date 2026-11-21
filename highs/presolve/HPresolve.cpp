@@ -2964,7 +2964,8 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
 
           if (intScale != 0.0 && intScale <= 1e3) {
             double rhs = rowUpper * intScale;
-            if (fractionality(rhs) > primal_feastol_decl * std::max(1.0, intScale))
+            if (fractionality(rhs) >
+                primal_feastol_decl * std::max(1.0, intScale))
               return Result::kPrimalInfeasible;
 
             rhs = std::round(rhs);
