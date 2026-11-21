@@ -2511,3 +2511,7 @@ TEST_CASE("presolve-scaled-solution-repair", "[highs_test_presolve]") {
   // presolve off: 9.1751417e-06
   presolveToleranceCheck("scaled-solution-repair", 9.5367431640625e-06, 1e-6);
 }
+
+TEST_CASE("presolve-rejected-leaf-solution", "[highs_test_presolve]") {
+  presolveToleranceCheck("rejected-leaf-solution", -1.99900945, 1e-6);
+}
