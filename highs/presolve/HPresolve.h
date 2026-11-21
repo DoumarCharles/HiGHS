@@ -236,6 +236,9 @@ class HPresolve {
   void changeRowLower(HighsInt row, double newLower,
                       bool skipRowDualUpdate = false);
 
+  void registerSubstitutionsIfDualImpliedFree(HighsInt row,
+                                              bool wasDualImpliedFree);
+
   void changeRowUpper(HighsInt row, double newUpper,
                       bool skipRowDualUpdate = false);
 

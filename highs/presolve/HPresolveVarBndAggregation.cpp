@@ -264,6 +264,16 @@ void HPresolve::aggregateVarBounds() {
           for (const auto& clique : cover) {
             if (clique.size() < 2) continue;
 
+            // the merged row has clique.size() + 1 nonzeros and replaces the
+            // unconsumed origin rows (two nonzeros each): skip the clique if
+            // merging would add nonzeros
+            size_t numOrigins = 0;
+            for (const auto& var : clique) {
+              HighsInt currentrow = boundsMap.find(var.col)->originalBound.origin;
+              if (currentrow >= 0 && !rowConsumed[currentrow]) numOrigins++;
+            }
+            if (clique.size() + 1 > 2 * numOrigins) continue;
+
             // find an unconsumed row to reuse and remove the rest
             HighsInt row = -1;
             for (const auto& var : clique) {

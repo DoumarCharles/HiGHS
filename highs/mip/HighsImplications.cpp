@@ -580,6 +580,10 @@ void HighsImplications::addVUB(HighsInt col, HighsInt vubcol, double vubcoef,
       currentvub.coef = vub.coef;
       currentvub.constant = vub.constant;
       currentvub.origin = vub.origin;
+    } else if (currentvub.origin < 0 && vub.coef == currentvub.coef &&
+               vub.constant == currentvub.constant) {
+      // the same bound derived again from its origin row
+      currentvub.origin = vub.origin;
     }
   } else
     numVarBounds++;
@@ -624,6 +628,10 @@ void HighsImplications::addVLB(HighsInt col, HighsInt vlbcol, double vlbcoef,
     if (maxBound > currentMaxBound + mipsolver.mipdata_->feastol) {
       currentvlb.coef = vlb.coef;
       currentvlb.constant = vlb.constant;
+      currentvlb.origin = vlb.origin;
+    } else if (currentvlb.origin < 0 && vlb.coef == currentvlb.coef &&
+               vlb.constant == currentvlb.constant) {
+      // the same bound derived again from its origin row
       currentvlb.origin = vlb.origin;
     }
   } else

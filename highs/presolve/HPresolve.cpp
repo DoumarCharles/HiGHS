@@ -965,6 +965,7 @@ void HPresolve::changeRowLower(HighsInt row, double newLower,
                                bool skipRowDualUpdate) {
   double oldLower = model->row_lower_[row];
   if (oldLower == newLower) return;
+  const bool wasDualImpliedFree = isDualImpliedFree(row);
   model->row_lower_[row] = newLower;
 
   if (!skipRowDualUpdate) {
@@ -988,12 +989,25 @@ void HPresolve::changeRowLower(HighsInt row, double newLower,
   if (newLower < oldLower) resetColImpliedBoundsDerivedFromRow(row);
   if (mipsolver != nullptr) mipsolver->mipdata_->implications.rowModified(row);
   markChangedRow(row);
+  registerSubstitutionsIfDualImpliedFree(row, wasDualImpliedFree);
+}
+
+void HPresolve::registerSubstitutionsIfDualImpliedFree(
+    HighsInt row, bool wasDualImpliedFree) {
+  // a row that has just become dual implied free (e.g. an inequality turned
+  // into an equation) offers the aggregator its implied free columns; only
+  // implied bound changes register them otherwise
+  if (wasDualImpliedFree || !isDualImpliedFree(row)) return;
+  for (const HighsSliceNonzero& nz : getRowVector(row))
+    if (isImpliedFree(nz.index()))
+      substitutionOpportunities.emplace_back(row, nz.index());
 }
 
 void HPresolve::changeRowUpper(HighsInt row, double newUpper,
                                bool skipRowDualUpdate) {
   double oldUpper = model->row_upper_[row];
   if (oldUpper == newUpper) return;
+  const bool wasDualImpliedFree = isDualImpliedFree(row);
   model->row_upper_[row] = newUpper;
 
   if (!skipRowDualUpdate) {
@@ -1017,6 +1031,7 @@ void HPresolve::changeRowUpper(HighsInt row, double newUpper,
   if (newUpper > oldUpper) resetColImpliedBoundsDerivedFromRow(row);
   if (mipsolver != nullptr) mipsolver->mipdata_->implications.rowModified(row);
   markChangedRow(row);
+  registerSubstitutionsIfDualImpliedFree(row, wasDualImpliedFree);
 }
 
 void HPresolve::addToRowLower(HighsInt row, const HighsCDouble& delta) {
@@ -3094,6 +3109,7 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
             double delta = static_cast<double>(
                 static_cast<HighsCDouble>(rowCoefs[i]) / scalar -
                 Avalue[rowpositions[i]]);
+            if (delta == 0.0) continue;
             if (!checkDelta || std::fabs(delta) > options->small_matrix_value)
               addToMatrix(row, rowIndex[i], delta);
           }
@@ -4920,6 +4936,35 @@ HPresolve::Result HPresolve::presolveChangedRows(
     if (rowDeleted[row]) continue;
     HPRESOLVE_CHECKED_CALL(rowPresolve(postsolve_stack, row));
     changedRowFlag[row] = rowDeleted[row];
+    if (rowDeleted[row]) continue;
+    // dual substitution of a column (dualFixing) depends on its single lock
+    // row in the direction favoured by its cost: if that row changed, queue
+    // the column for colPresolve. Columns with two or more such locks cannot
+    // gain from a change of one row.
+    auto numLocks = [&](HighsInt col, bool down) {
+      HighsInt n = 0;
+      for (const HighsSliceNonzero& cnz : getColumnVector(col)) {
+        const HighsInt r = cnz.index();
+        const bool lower = model->row_lower_[r] != -kHighsInf;
+        const bool upper = model->row_upper_[r] != kHighsInf;
+        if (down ? (cnz.value() > 0 ? lower : upper)
+                 : (cnz.value() > 0 ? upper : lower))
+          if (++n > 1) break;
+      }
+      return n;
+    };
+    const bool lhsFinite = model->row_lower_[row] != -kHighsInf;
+    const bool rhsFinite = model->row_upper_[row] != kHighsInf;
+    for (const HighsSliceNonzero& nz : getRowVector(row)) {
+      const HighsInt col = nz.index();
+      if (changedColFlag[col]) continue;
+      const double cost = model->col_cost_[col];
+      const bool downLock = nz.value() > 0 ? lhsFinite : rhsFinite;
+      const bool upLock = nz.value() > 0 ? rhsFinite : lhsFinite;
+      if ((cost >= 0 && downLock && numLocks(col, true) == 1) ||
+          (cost <= 0 && upLock && numLocks(col, false) == 1))
+        markChangedCol(col);
+    }
   }
 
   return Result::kOk;

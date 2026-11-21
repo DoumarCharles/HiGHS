@@ -1233,10 +1233,8 @@ TEST_CASE("issue-3140", "[highs_test_presolve]") {
 
   REQUIRE(highs.passModel(lp) == HighsStatus::kOk);
   REQUIRE(highs.presolve() == HighsStatus::kOk);
-  REQUIRE(highs.getModelPresolveStatus() == HighsPresolveStatus::kReduced);
-  // No longer reduced to empty with dominated column rule off (#3342)
-  //
-  // HighsPresolveStatus::kReducedToEmpty);
+  REQUIRE(highs.getModelPresolveStatus() ==
+          HighsPresolveStatus::kReducedToEmpty);
 
   highs.resetThreadScheduler(true);
 }
