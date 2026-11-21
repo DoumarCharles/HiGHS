@@ -423,6 +423,9 @@ class HEkkDual {
   bool force_phase2;
   HighsInt solve_phase;
   HighsInt rebuild_reason;
+  // Dual phase 2 exhausted its available basis changes with a failed
+  // proof of infeasibility still taboo, after a fresh factorization
+  bool failed_proof_exhausted_basis_changes_ = false;
   HighsInt num_exact_objective_bound_call_;
   HighsHashTable<uint64_t> phase_start_basis_;
   bool backtracked_;

@@ -1100,6 +1100,9 @@ HighsStatus HEkk::solve(const bool force_phase2) {
       highsLogUser(options_->log_options, HighsLogType::kInfo, "Using %s\n",
                    simplexStrategyToString(kSimplexStrategyDual).c_str());
     }
+    // A failed proof of infeasibility from an earlier solve may not
+    // hold for the current data
+    clearBadBasisChange(BadBasisChangeReason::kFailedInfeasibilityProof);
     HEkkDual dual_solver(*this);
     call_status = dual_solver.solve(force_phase2);
     assert(called_return_from_solve_);
@@ -1109,6 +1112,7 @@ HighsStatus HEkk::solve(const bool force_phase2) {
     // Dual simplex solver may set model_status to be
     // kUnboundedOrInfeasible, and Highs::run() may not allow that to
     // be returned, so use primal simplex to distinguish
+    bool primal_has_run = false;
     if (model_status_ == HighsModelStatus::kUnboundedOrInfeasible &&
         !options_->allow_unbounded_or_infeasible) {
       HEkkPrimal primal_solver(*this);
@@ -1116,6 +1120,24 @@ HighsStatus HEkk::solve(const bool force_phase2) {
       assert(called_return_from_solve_);
       return_status = interpretCallStatus(options_->log_options, call_status,
                                           return_status, "HEkkPrimal::solve");
+      primal_has_run = true;
+    }
+    // Dual simplex solver may be unable to decide, having exhausted its
+    // basis changes with a failed proof of infeasibility still taboo
+    // after a fresh factorization, so use primal simplex
+    if (model_status_ == HighsModelStatus::kUnknown &&
+        dual_solver.failed_proof_exhausted_basis_changes_ && !solve_bailout_ &&
+        !primal_has_run) {
+      highsLogUser(options_->log_options, HighsLogType::kInfo,
+                   "Dual simplex solver ended with model status unknown: "
+                   "using primal simplex\n");
+      clearBadBasisChange();
+      HEkkPrimal primal_solver(*this);
+      call_status = primal_solver.solve();
+      assert(called_return_from_solve_);
+      return_status =
+          interpretCallStatus(options_->log_options, call_status,
+                              HighsStatus::kOk, "HEkkPrimal::solve");
     }
   }
 
@@ -3946,12 +3968,18 @@ void HEkk::clearBadBasisChange(const BadBasisChangeReason reason) {
 void HEkk::updateBadBasisChange(const HVector& col_aq, double theta_primal) {
   if (!bad_basis_change_.empty()) {
     bad_basis_change_.erase(
-        std::remove_if(bad_basis_change_.begin(), bad_basis_change_.end(),
-                       [&](const HighsSimplexBadBasisChangeRecord& record) {
-                         return std::fabs(col_aq.array[record.row_out] *
-                                          theta_primal) >=
-                                options_->primal_feasibility_tolerance;
-                       }),
+        std::remove_if(
+            bad_basis_change_.begin(), bad_basis_change_.end(),
+            [&](const HighsSimplexBadBasisChangeRecord& record) {
+              // A failed proof of infeasibility no longer
+              // holds when the basis change alters the row
+              if (record.reason ==
+                      BadBasisChangeReason::kFailedInfeasibilityProof &&
+                  col_aq.array[record.row_out] != 0)
+                return true;
+              return std::fabs(col_aq.array[record.row_out] * theta_primal) >=
+                     options_->primal_feasibility_tolerance;
+            }),
         bad_basis_change_.end());
   }
 }
@@ -3996,13 +4024,28 @@ HighsInt HEkk::addBadBasisChange(const HighsInt row_out,
   return bad_basis_change_num;
 }
 
-void HEkk::clearBadBasisChangeTabooFlag() {
-  for (auto& change : bad_basis_change_) change.taboo = false;
+void HEkk::clearBadBasisChangeTabooFlag(
+    const bool keep_failed_infeasibility_proof) {
+  for (auto& change : bad_basis_change_) {
+    if (keep_failed_infeasibility_proof &&
+        change.reason == BadBasisChangeReason::kFailedInfeasibilityProof)
+      continue;
+    change.taboo = false;
+  }
 }
 
 bool HEkk::tabooBadBasisChange() const {
   for (const auto& change : bad_basis_change_) {
     if (change.taboo) return true;
+  }
+  return false;
+}
+
+bool HEkk::tabooFailedInfeasibilityProof() const {
+  for (const auto& change : bad_basis_change_) {
+    if (change.taboo &&
+        change.reason == BadBasisChangeReason::kFailedInfeasibilityProof)
+      return true;
   }
   return false;
 }

@@ -967,6 +967,17 @@ void HEkkDual::solvePhase2() {
       // other words, the only basis change that could be made is not
       // permitted, so no definitive statement about the LP can be
       // made.
+      //
+      // If a row is taboo since its proof of infeasibility failed,
+      // refactorize and try the rows again. If this happens on a fresh
+      // factorization, record it so that primal simplex is used
+      if (ekk_instance_.tabooFailedInfeasibilityProof()) {
+        if (ekk_instance_.info_.update_count > 0) {
+          rebuild_reason = kRebuildReasonPossiblySingularBasis;
+          continue;
+        }
+        failed_proof_exhausted_basis_changes_ = true;
+      }
       solve_phase = kSolvePhaseTabooBasis;
       return;
     }
@@ -1076,12 +1087,17 @@ void HEkkDual::resetCyclingDetection() {
 void HEkkDual::rebuild() {
   HighsSimplexInfo& info = ekk_instance_.info_;
   HighsSimplexStatus& status = ekk_instance_.status_;
-  // Clear taboo flag from any bad basis changes
-  ekk_instance_.clearBadBasisChangeTabooFlag();
-
   // Decide whether refactorization should be performed
   const bool refactor_basis_matrix =
       ekk_instance_.rebuildRefactor(rebuild_reason);
+
+  // Clear taboo flag from any bad basis changes. In phase 2, rows whose
+  // proof of infeasibility failed stay taboo until the basis matrix is
+  // refactorized
+  if (refactor_basis_matrix)
+    ekk_instance_.clearBadBasisChange(
+        BadBasisChangeReason::kFailedInfeasibilityProof);
+  ekk_instance_.clearBadBasisChangeTabooFlag(solve_phase == kSolvePhase2);
 
   // Take a local copy of the rebuild reason and then reset the global value
   const HighsInt local_rebuild_reason = rebuild_reason;

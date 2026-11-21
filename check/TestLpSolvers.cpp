@@ -913,6 +913,23 @@ static double farkasMargin(const HighsLp& lp, const std::vector<double>& ray) {
   return std::max(row_min - col_max, col_min - row_max);
 }
 
+// Counts the log lines saying that primal simplex is used since dual
+// simplex ended with model status unknown. The logging callback is only
+// called when output_flag is true
+static void countPrimalAfterUnknown(Highs& h, HighsInt& count) {
+  h.setOptionValue("output_flag", true);
+  h.setOptionValue("log_to_console", dev_run);
+  h.setCallback([&count](int callback_type, const std::string& message,
+                         const HighsCallbackOutput*, HighsCallbackInput*,
+                         void*) {
+    if (callback_type == kCallbackLogging &&
+        message.find("model status unknown: using primal simplex") !=
+            std::string::npos)
+      count++;
+  });
+  h.startCallback(kCallbackLogging);
+}
+
 TEST_CASE("issue-3418", "[highs_lp_solver]") {
   // Infeasible, since row 10 is x10 = -1e6 with x10 >= 0. In dual phase 2
   // a row with no entering column and no proof of infeasibility is made
@@ -934,11 +951,14 @@ TEST_CASE("issue-3418", "[highs_lp_solver]") {
                          0.8,     -1.04666, -1,   -1.11036, -1,  2,  -2,  1,
                          -1,      1,        -0.8, -1,       1,   -1, -0.9};
   Highs h;
-  h.setOptionValue("output_flag", dev_run);
+  HighsInt primal_after_unknown = 0;
+  countPrimalAfterUnknown(h, primal_after_unknown);
   h.setOptionValue("presolve", kHighsOffString);
   REQUIRE(h.passModel(lp) == HighsStatus::kOk);
   REQUIRE(h.run() == HighsStatus::kOk);
   REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
+  // Dual simplex proves infeasibility without primal simplex
+  REQUIRE(primal_after_unknown == 0);
   bool has_dual_ray = false;
   std::vector<double> dual_ray(lp.num_row_);
   REQUIRE(h.getDualRay(has_dual_ray, dual_ray.data()) == HighsStatus::kOk);
@@ -946,5 +966,22 @@ TEST_CASE("issue-3418", "[highs_lp_solver]") {
   const double farkas_margin = farkasMargin(lp, dual_ray);
   INFO("Farkas margin " << farkas_margin);
   REQUIRE(farkas_margin > 0);
+  h.resetThreadScheduler(true);
+}
+
+TEST_CASE("issue-3418-primal", "[highs_lp_solver]") {
+  // Infeasible, since row r1344 is -0.03 c1544 = 3e5 with c1544 >= 0. In
+  // dual simplex the proof of infeasibility from every primal infeasible
+  // row fails on a fresh factorization, so primal simplex is used
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/issue-3418.mps";
+  Highs h;
+  HighsInt primal_after_unknown = 0;
+  countPrimalAfterUnknown(h, primal_after_unknown);
+  h.setOptionValue("presolve", kHighsOffString);
+  REQUIRE(h.readModel(filename) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
+  REQUIRE(primal_after_unknown == 1);
   h.resetThreadScheduler(true);
 }

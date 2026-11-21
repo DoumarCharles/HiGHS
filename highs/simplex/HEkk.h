@@ -361,8 +361,10 @@ class HEkk {
                              const HighsInt variable_in,
                              const BadBasisChangeReason reason,
                              const bool taboo = false);
-  void clearBadBasisChangeTabooFlag();
+  void clearBadBasisChangeTabooFlag(
+      const bool keep_failed_infeasibility_proof = false);
   bool tabooBadBasisChange() const;
+  bool tabooFailedInfeasibilityProof() const;
   void applyTabooRowOut(vector<double>& values, const double overwrite_with);
   void unapplyTabooRowOut(vector<double>& values);
   void applyTabooVariableIn(vector<double>& values,
