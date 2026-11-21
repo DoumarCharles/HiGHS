@@ -275,11 +275,17 @@ void HighsPostsolveStack::ForcingColumn::undo(
                                 : HighsBasisStatus::kUpper;
       }
     }
-    // round solution value if column is integer-constrained
-    if (nonbasicRow != -1 && colIntegral)
+    // round solution value if column is integer-constrained; the
+    // tolerance applies to the rows, so divide it by the largest
+    // coefficient
+    if (nonbasicRow != -1 && colIntegral) {
+      double maxAbsVal = 1.0;
+      for (const auto& colVal : colValues)
+        maxAbsVal = std::max(maxAbsVal, std::fabs(colVal.value));
       colValFromNonbasicRow =
           direction * std::ceil(direction * colValFromNonbasicRow -
-                                options.mip_feasibility_tolerance);
+                                options.mip_feasibility_tolerance / maxAbsVal);
+    }
   };
 
   if (atInfiniteUpper) {
