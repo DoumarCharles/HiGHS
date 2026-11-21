@@ -869,31 +869,58 @@ void HighsMipSolverData::checkAddSolution() {
             mipsolver.solution_objective_, mipsolver.bound_violation_,
             mipsolver.row_violation_, mipsolver.integrality_violation_);
       }
-      // Since the supplied solution (mipsolver.solution_) may not
-      // correspond to postsolve applied to incumbent (#3510), compute
-      // the objective locally using incumbent, saving the value of
-      // mipsolver.solution_objective_ to identify changes
-      const double previous_mipsolver_solution_objective =
-          mipsolver.solution_objective_;
-      double mipsolver_solution_objective =
-          double(mipsolver.model_->objectiveCDoubleValue(incumbent));
-      mipsolver.solution_objective_ =
-          int(mipsolver.orig_model_->sense_) * mipsolver_solution_objective;
-      const bool has_start_solution_objective_difference =
-          std::fabs(mipsolver.solution_objective_ -
-                    previous_mipsolver_solution_objective) /
-              (1 + std::fabs(previous_mipsolver_solution_objective)) >
-          mipsolver.options_mip_->mip_feasibility_tolerance;
-      // This affects solobj - which is use used to determine bounds
-      // etc (without the objective offset)
-      solobj = mipsolver_solution_objective - mipsolver.model_->offset_;
-      if (has_start_solution_objective_difference) {
-        const bool reduced = postSolveStack.numReductions() > 0;
-        highsLogUser(mipsolver.options_mip_->log_options, HighsLogType::kInfo,
-                     "MIP start solution is %s%s: objective value is %.12g\n",
-                     feasible ? "feasible" : "infeasible",
-                     reduced ? " in the reduced space" : "",
-                     mipsolver.solution_objective_);
+      // The supplied solution (mipsolver.solution_) may contradict a
+      // presolve reduction: then incumbent need not postsolve to it
+      // (#3510), and need not even be feasible in the reduced model,
+      // since dual reductions keep an optimal solution, not every
+      // feasible one. Use incumbent only if it is feasible, and when its
+      // objective is better, return its postsolved solution so that the
+      // solution and the objective agree
+      const double tol = mipsolver.options_mip_->mip_feasibility_tolerance;
+      const HighsLp& model = *mipsolver.model_;
+      bool image_feasible = feasible &&
+                            HighsInt(incumbent.size()) == model.num_col_ &&
+                            model.a_matrix_.isColwise();
+      std::vector<HighsCDouble> activity(model.num_row_, 0.0);
+      for (HighsInt col = 0; image_feasible && col < model.num_col_; col++) {
+        const double value = incumbent[col];
+        if (value < model.col_lower_[col] - tol ||
+            value > model.col_upper_[col] + tol ||
+            (mipsolver.isColInteger(col) && fractionality(value) > tol))
+          image_feasible = false;
+        for (HighsInt el = model.a_matrix_.start_[col];
+             el < model.a_matrix_.start_[col + 1]; el++)
+          activity[model.a_matrix_.index_[el]] +=
+              model.a_matrix_.value_[el] * value;
+      }
+      for (HighsInt row = 0; image_feasible && row < model.num_row_; row++)
+        if (double(activity[row]) < model.row_lower_[row] - tol ||
+            double(activity[row]) > model.row_upper_[row] + tol)
+          image_feasible = false;
+      const bool reduced = postSolveStack.numReductions() > 0;
+      if (!image_feasible) {
+        if (feasible && reduced)
+          highsLogUser(mipsolver.options_mip_->log_options, HighsLogType::kInfo,
+                       "MIP start solution is not feasible in the reduced "
+                       "space\n");
+        incumbent.clear();
+      } else {
+        const double image_solobj =
+            double(model.objectiveCDoubleValue(incumbent)) - model.offset_;
+        if ((solobj - image_solobj) / (1 + std::fabs(solobj)) > tol) {
+          transformNewIntegerFeasibleSolution(incumbent, true);
+          // This affects solobj - which is used to determine bounds etc
+          // (without the objective offset)
+          solobj = mipsolver.solution_objective_ *
+                       (int)mipsolver.orig_model_->sense_ -
+                   model.offset_;
+          highsLogUser(mipsolver.options_mip_->log_options, HighsLogType::kInfo,
+                       "MIP start solution is feasible in the reduced space: "
+                       "objective value is %.12g\n",
+                       mipsolver.solution_objective_);
+        } else if ((image_solobj - solobj) / (1 + std::fabs(solobj)) > tol) {
+          incumbent.clear();
+        }
       }
     }
     if (feasible && solobj < upper_bound) {

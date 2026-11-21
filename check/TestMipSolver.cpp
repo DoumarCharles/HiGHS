@@ -2871,3 +2871,37 @@ TEST_CASE("issue-3629", "[highs_test_mip_solver]") {
   REQUIRE(std::fabs(h.getInfo().objective_function_value - 3) < 1e-9);
   h.resetThreadScheduler(true);
 }
+
+TEST_CASE("issue-3643", "[highs_test_mip_solver]") {
+  // The MIP start (objective 2.25) has x6 = 1, which presolve removes as
+  // dominated by x2, so its image in the reduced space is infeasible. The
+  // objective of the image (-5) was used as the upper bound, below the
+  // optimal objective -1
+  HighsLp lp;
+  lp.num_col_ = 6;
+  lp.num_row_ = 3;
+  lp.col_cost_ = {3, 4, 0, -5, 4.5, 7.25};
+  lp.col_lower_.assign(6, 0);
+  lp.col_upper_.assign(6, 1);
+  lp.integrality_.assign(6, HighsVarType::kInteger);
+  lp.row_lower_ = {-kHighsInf, 1, -kHighsInf};
+  lp.row_upper_ = {25, 1, 1};
+  lp.a_matrix_.format_ = MatrixFormat::kColwise;
+  lp.a_matrix_.start_ = {0, 2, 3, 5, 7, 8, 9};
+  lp.a_matrix_.index_ = {1, 2, 0, 0, 1, 0, 2, 1, 0};
+  lp.a_matrix_.value_ = {1, 1, -5, 17, 1, 13, 1, 1, -5};
+  Highs h;
+  h.setOptionValue("output_flag", dev_run);
+  REQUIRE(h.passModel(lp) == HighsStatus::kOk);
+  HighsSolution start;
+  start.col_value = {0, 0, 1, 1, 0, 1};
+  REQUIRE(h.setSolution(start) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kOptimal);
+  REQUIRE(std::fabs(h.getInfo().objective_function_value + 1) < 1e-9);
+  const std::vector<double>& x = h.getSolution().col_value;
+  double objective = 0;
+  for (HighsInt i = 0; i < 6; i++) objective += lp.col_cost_[i] * x[i];
+  REQUIRE(std::fabs(objective + 1) < 1e-9);
+  h.resetThreadScheduler(true);
+}
