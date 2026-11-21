@@ -1328,6 +1328,8 @@ void HPresolve::addToMatrix(const HighsInt row, const HighsInt col,
   markChangedCol(col);
 
   if (pos == -1) {
+    // never store a zero: toCSC treats a zero value as a free slot
+    if (val == 0.0) return;
     if (freeslots.empty()) {
       pos = static_cast<HighsInt>(Avalue.size());
       Avalue.push_back(val);
@@ -2333,9 +2335,9 @@ HPresolve::Result HPresolve::doubletonEq(HighsPostsolveStack& postsolve_stack,
 
   if (model->integrality_[staycol] == HighsVarType::kInteger) {
     // round with a tolerance that keeps the substituted column within
-    // primal_feastol of its bounds
+    // the user feasibility tolerance of its bounds
     double tol =
-        primal_feastol * std::min(1.0, std::fabs(substcoef / staycoef));
+        primal_feastol_decl * std::min(1.0, std::fabs(substcoef / staycoef));
     stayImplLower = std::ceil(stayImplLower - tol);
     stayImplUpper = std::floor(stayImplUpper + tol);
   }
@@ -2646,7 +2648,7 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
                               double rowActivityBound, double rowBound) {
         // return if row is still feasible
         if (direction * rowActivityBound >=
-            direction * rowBound - primal_feastol)
+            direction * rowBound - primal_feastol_decl)
           return Result::kOk;
 
         // tighten bound
@@ -4813,9 +4815,16 @@ HPresolve::Result HPresolve::substitute(HighsInt substcol, HighsInt staycol,
     model->offset_ += model->col_cost_[substcol] * offset;
     assert(std::isfinite(model->offset_));
 
+    const double oldCost = model->col_cost_[staycol];
     model->col_cost_[staycol] += scale * model->col_cost_[substcol];
 
-    if (std::abs(model->col_cost_[staycol]) <= options->small_matrix_value)
+    // for a MIP only a cost that cancelled up to round-off is dropped: a
+    // dropped cost is multiplied by the column value
+    const double dropTol =
+        mipsolver != nullptr
+            ? 4 * std::numeric_limits<double>::epsilon() * std::fabs(oldCost)
+            : options->small_matrix_value;
+    if (std::abs(model->col_cost_[staycol]) <= dropTol)
       model->col_cost_[staycol] = 0.0;
     model->col_cost_[substcol] = 0.0;
   }

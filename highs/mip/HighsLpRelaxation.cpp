@@ -1371,11 +1371,22 @@ HighsLpRelaxation::Status HighsLpRelaxation::run(bool resolve_on_error) {
       // postsolve cannot be run, so there is no basis. Returning
       // Status::kError as a result yielded #1962, where the root node
       // is unbounded.
-      if (info.basis_validity == kBasisValidityInvalid)
+      if (info.basis_validity == kBasisValidityInvalid) {
+        std::string presolve;
+        lpsolver.getOptionValue("presolve", presolve);
+        if (presolve != kHighsOffString) {
+          // the claim is for the presolved LP and has no basis or ray to
+          // check it with: solve the LP itself before it decides the MIP
+          lpsolver.setOptionValue("presolve", kHighsOffString);
+          auto retval = run(resolve_on_error);
+          lpsolver.setOptionValue("presolve", presolve);
+          return retval;
+        }
         highsLogUser(mipsolver.options_mip_->log_options,
                      HighsLogType::kWarning,
                      "HighsLpRelaxation::run LP is unbounded with no basis, "
                      "but not returning Status::kError\n");
+      }
       if (info.primal_solution_status == kSolutionStatusFeasible) {
         if (!mipsolver.mipdata_->parallelLockActive() || !worker_) {
           mipsolver.mipdata_->trySolution(lpsolver.getSolution().col_value,
