@@ -2466,9 +2466,11 @@ TEST_CASE("issue-3565", "[highs_test_presolve]") {
 
 // Planted-feasible models (exact optimum from an exact solver) that MIP
 // presolve once declared infeasible or crashed on, solved with presolve on
-// and off
+// and off. The tolerance is well below |optimum| unless the optimum is 0, and
+// covers the distance of a solution feasible within the tolerances from it
 static void presolveToleranceCheck(const std::string& model,
-                                   const double optimum) {
+                                   const double optimum,
+                                   const double tolerance) {
   const std::string model_file =
       std::string(HIGHS_DIR) + "/check/instances/" + model + ".mps";
   for (const std::string presolve : {kHighsOnString, kHighsOffString}) {
@@ -2478,27 +2480,29 @@ static void presolveToleranceCheck(const std::string& model,
     REQUIRE(h.readModel(model_file) != HighsStatus::kError);
     h.run();
     REQUIRE(h.getModelStatus() == HighsModelStatus::kOptimal);
-    REQUIRE(std::fabs(h.getInfo().objective_function_value - optimum) <= 1e-4);
+    REQUIRE(std::fabs(h.getInfo().objective_function_value - optimum) <=
+            tolerance);
     h.resetThreadScheduler(true);
   }
 }
 
 TEST_CASE("presolve-empty-row-sparsify", "[highs_test_presolve]") {
-  presolveToleranceCheck("empty-row-sparsify", -0.499);
+  presolveToleranceCheck("empty-row-sparsify", -0.499, 1e-6);
 }
 
 TEST_CASE("presolve-impliedint-row-rounding", "[highs_test_presolve]") {
-  presolveToleranceCheck("impliedint-row-rounding", 0.0);
+  presolveToleranceCheck("impliedint-row-rounding", 0.0, 1e-9);
 }
 
 TEST_CASE("presolve-probing-implied-crossing", "[highs_test_presolve]") {
-  presolveToleranceCheck("probing-implied-crossing", -1.0);
+  // presolve off: -1.0000143
+  presolveToleranceCheck("probing-implied-crossing", -1.0, 1e-4);
 }
 
 TEST_CASE("presolve-relaxed-col-bound", "[highs_test_presolve]") {
-  presolveToleranceCheck("relaxed-col-bound", -3.576278694e-07);
+  presolveToleranceCheck("relaxed-col-bound", -3.576278694e-07, 1e-9);
 }
 
 TEST_CASE("presolve-singleton-strict-dual", "[highs_test_presolve]") {
-  presolveToleranceCheck("singleton-strict-dual", 1.1920928955078125e-07);
+  presolveToleranceCheck("singleton-strict-dual", 1.1920928955078125e-07, 1e-9);
 }
