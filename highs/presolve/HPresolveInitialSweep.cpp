@@ -52,8 +52,9 @@ HPresolveInitialSweep::Result HPresolveInitialSweep::checkColBounds(
     // check for unboundedness
     if (std::abs(lp_.col_lower_[col]) == kHighsInf)
       return Result::kDualInfeasible;
-    // column is fixed
-    isFixed = true;
+    // column is fixed only if its bounds are equal: a near-fixed column
+    // removed at a bound moves its rows, and such moves add up
+    isFixed = boundDiff <= 0;
   }
   return Result::kOk;
 }

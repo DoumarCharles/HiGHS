@@ -83,9 +83,9 @@ SingletonRowResult computeSingletonRowBounds(
     // set the bound to one of the values. To heuristically get rid of numerical
     // errors we choose the bound that was not tightened, or the midpoint if
     // both where tightened.
-    if (ub < lb ||
-        (ub > lb &&
-         (ub - lb) * std::max(std::abs(val), maxAbsColVal) <= primalFeastol)) {
+    // Bounds that are apart stay apart: a column snapped to one bound moves
+    // its other rows, and such moves add up
+    if (ub < lb) {
       if (lowerTightened && upperTightened) {
         ub = 0.5 * (ub + lb);
         lb = ub;

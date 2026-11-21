@@ -1587,8 +1587,9 @@ HPresolve::Result HPresolve::checkColBounds(HighsInt col, bool* isFixed) {
     // check for unboundedness
     if (std::abs(model->col_lower_[col]) == kHighsInf)
       return Result::kDualInfeasible;
-    // column is fixed
-    if (isFixed != nullptr) *isFixed = true;
+    // column is fixed only if its bounds are equal: a near-fixed column
+    // removed at a bound moves its rows, and such moves add up
+    if (isFixed != nullptr) *isFixed = boundDiff <= 0;
   }
   return Result::kOk;
 }
