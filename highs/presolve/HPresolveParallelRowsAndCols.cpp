@@ -14,6 +14,12 @@ namespace presolve {
 
 HPresolve::Result HPresolve::detectParallelRowsAndCols(
     HighsPostsolveStack& postsolve_stack) {
+  // the coefficients must agree up to round-off: an absolute difference is
+  // multiplied by the column value in the merged row / column (also for an LP,
+  // which includes the LP relaxations solved by the MIP solver)
+  auto parallelTol = [](double val) {
+    return 4 * std::numeric_limits<double>::epsilon() * std::fabs(val);
+  };
   assert(this->allow_rule_[kPresolveRuleParallelRowsAndCols]);
   const bool logging_on = analysis_.logging_on_;
   if (logging_on)
@@ -337,7 +343,7 @@ HPresolve::Result HPresolve::detectParallelRowsAndCols(
 
         parallel = abs(Avalue[duplicateColRowPos] -
                        static_cast<HighsCDouble>(colScale) * colNz.value()) <=
-                   options->small_matrix_value;
+                   parallelTol(Avalue[duplicateColRowPos]);
         if (!parallel) break;
       }
 
@@ -555,7 +561,7 @@ HPresolve::Result HPresolve::detectParallelRowsAndCols(
 
         parallel = abs(Avalue[nzPos] -
                        static_cast<HighsCDouble>(rowScale) * rowNz.value()) <=
-                   options->small_matrix_value;
+                   parallelTol(Avalue[nzPos]);
         if (!parallel) break;
       }
       if (!parallel) continue;
