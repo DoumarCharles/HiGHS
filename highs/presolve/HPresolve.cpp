@@ -703,7 +703,7 @@ void HPresolve::updateRowDualImpliedBounds(HighsInt row, HighsInt col,
   if (!checkUpdateRowDualImpliedBounds(col, &dualRowLower, &dualRowUpper))
     return;
 
-  const double threshold = 1000 * options->dual_feasibility_tolerance;
+  const double threshold = 1000 * dual_feastol_decl;
 
   auto checkImpliedBound = [&](HighsInt row, HighsInt col, double val,
                                double dualRowBnd, double residualAct,
@@ -712,9 +712,7 @@ void HPresolve::updateRowDualImpliedBounds(HighsInt row, HighsInt col,
     double impliedBound = static_cast<double>(
         (static_cast<HighsCDouble>(dualRowBnd) - residualAct) / val);
 
-    if (std::abs(impliedBound) * kHighsTiny >
-        options->dual_feasibility_tolerance)
-      return;
+    if (std::abs(impliedBound) * kHighsTiny > dual_feastol_decl) return;
 
     if (direction * val > 0) {
       // only tighten bound if it is tighter by a wide enough margin
@@ -775,7 +773,7 @@ HPresolve::Result HPresolve::updateColImpliedBounds(HighsInt row, HighsInt col,
   if (!checkUpdateColImpliedBounds(row, &rowLower, &rowUpper))
     return Result::kOk;
 
-  const double threshold = 1000 * primal_feastol;
+  const double threshold = 1000 * primal_feastol_decl;
 
   auto checkImpliedBound = [&](HighsInt row, HighsInt col, double val,
                                double rowBnd, double residualAct,
@@ -784,7 +782,7 @@ HPresolve::Result HPresolve::updateColImpliedBounds(HighsInt row, HighsInt col,
     double impliedBound = static_cast<double>(
         (static_cast<HighsCDouble>(rowBnd) - residualAct) / val);
 
-    if (std::abs(impliedBound) * kHighsTiny > primal_feastol)
+    if (std::abs(impliedBound) * kHighsTiny > primal_feastol_decl)
       return Result::kOk;
 
     // do not use the implied bound if this a not a model row, since the
@@ -1328,8 +1326,8 @@ void HPresolve::addToMatrix(const HighsInt row, const HighsInt col,
   markChangedCol(col);
 
   if (pos == -1) {
-    // never store a zero: toCSC treats a zero value as a free slot
-    if (val == 0.0) return;
+    // a new entry is a sum with zero: same cutoff as for a cancelled sum
+    if (std::abs(val) <= options->small_matrix_value) return;
     if (freeslots.empty()) {
       pos = static_cast<HighsInt>(Avalue.size());
       Avalue.push_back(val);
@@ -2509,6 +2507,19 @@ HPresolve::Result HPresolve::singletonCol(HighsPostsolveStack& postsolve_stack,
   HPRESOLVE_TIMED_CHECKED_CALL_IF(timing,
                                   kPresolveClockSingletonColImpliedBounds,
                                   updateColImpliedBounds(row, col, colCoef));
+
+  // a bound of a continuous singleton column that equals the bound implied
+  // by the row is redundant: it is removed, so that the column counts as
+  // strictly implied in what follows
+  if (mipsolver != nullptr &&
+      model->integrality_[col] == HighsVarType::kContinuous) {
+    if (model->col_lower_[col] != -kHighsInf &&
+        implColLower[col] == model->col_lower_[col])
+      HPRESOLVE_CHECKED_CALL(changeColLower(col, -kHighsInf));
+    if (model->col_upper_[col] != kHighsInf &&
+        implColUpper[col] == model->col_upper_[col])
+      HPRESOLVE_CHECKED_CALL(changeColUpper(col, kHighsInf));
+  }
 
   // update row dual implied bounds
   if (model->integrality_[col] != HighsVarType::kInteger) {

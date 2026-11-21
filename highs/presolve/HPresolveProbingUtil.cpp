@@ -206,11 +206,11 @@ HPresolve::Result HPresolve::prepareProbing(
   double hugeBound = primal_feastol_decl / kHighsTiny;
   for (HighsInt i = 0; i != model->num_col_; ++i) {
     if (std::abs(implColLower[i]) <= hugeBound &&
-        implColLower[i] > model->col_lower_[i])
+        implColLower[i] > model->col_lower_[i] + primal_feastol_decl)
       HPRESOLVE_CHECKED_CALL(changeColLower(i, implColLower[i]));
 
     if (std::abs(implColUpper[i]) <= hugeBound &&
-        implColUpper[i] < model->col_upper_[i])
+        implColUpper[i] < model->col_upper_[i] - primal_feastol_decl)
       HPRESOLVE_CHECKED_CALL(changeColUpper(i, implColUpper[i]));
   }
 
