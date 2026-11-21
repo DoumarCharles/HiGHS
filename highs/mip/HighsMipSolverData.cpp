@@ -1024,7 +1024,7 @@ void HighsMipSolverData::runSetup() {
     bool integral = true;
     for (HighsInt j = start; j != end; ++j) {
       integral = integral && mipsolver.isColIntegral(ARindex_[j]) &&
-                 fractionality(ARvalue_[j]) <= epsilon;
+                 fractionality(ARvalue_[j]) == 0.0;
 
       maxabsval = std::max(maxabsval, std::abs(ARvalue_[j]));
     }
