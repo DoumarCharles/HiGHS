@@ -205,12 +205,10 @@ HPresolve::Result HPresolve::singletonColStuffing(
           (static_cast<HighsCDouble>(model->col_upper_[t.col]) -
            static_cast<HighsCDouble>(model->col_lower_[t.col]));
       // check if variable can be fixed
-      if (sumUpperFinite &&
-          delta - (direction * rhs - sumUpper) <= primal_feastol) {
+      if (sumUpperFinite && delta - (direction * rhs - sumUpper) <= 0) {
         numFixedCols++;
         HPRESOLVE_CHECKED_CALL(fixCol(t.col, t.multiplier));
-      } else if (sumLowerFinite &&
-                 delta - (sumLower - direction * rhs) <= primal_feastol) {
+      } else if (sumLowerFinite && delta - (sumLower - direction * rhs) <= 0) {
         // Previously
         //
         // direction * rhs <= sumLower + primal_feastol
