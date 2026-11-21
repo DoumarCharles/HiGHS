@@ -2486,3 +2486,7 @@ static void presolveToleranceCheck(const std::string& model,
 TEST_CASE("presolve-empty-row-sparsify", "[highs_test_presolve]") {
   presolveToleranceCheck("empty-row-sparsify", -0.499);
 }
+
+TEST_CASE("presolve-impliedint-row-rounding", "[highs_test_presolve]") {
+  presolveToleranceCheck("impliedint-row-rounding", 0.0);
+}
