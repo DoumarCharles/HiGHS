@@ -2630,6 +2630,17 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
   switch (rowsize[row]) {
     default:
       break;
+    case 0:
+      // empty row: feasible if zero is within the tolerance of its bounds
+      if (model->row_upper_[row] < -primal_feastol_decl ||
+          model->row_lower_[row] > primal_feastol_decl)
+        return Result::kPrimalInfeasible;
+      if (logging_on) analysis_.startPresolveRuleLog(kPresolveRuleEmptyRow);
+      postsolve_stack.redundantRow(row);
+      removeRow(row);
+      analysis_.logging_on_ = logging_on;
+      if (logging_on) analysis_.stopPresolveRuleLog(kPresolveRuleEmptyRow);
+      return checkLimits(postsolve_stack);
     case 1:
       return singletonRow(postsolve_stack, row);
   }

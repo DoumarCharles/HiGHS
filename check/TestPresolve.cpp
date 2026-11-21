@@ -2463,3 +2463,26 @@ TEST_CASE("issue-3565", "[highs_test_presolve]") {
 
   h.resetThreadScheduler(true);
 }
+
+// Planted-feasible models (exact optimum from an exact solver) that MIP
+// presolve once declared infeasible or crashed on, solved with presolve on
+// and off
+static void presolveToleranceCheck(const std::string& model,
+                                   const double optimum) {
+  const std::string model_file =
+      std::string(HIGHS_DIR) + "/check/instances/" + model + ".mps";
+  for (const std::string presolve : {kHighsOnString, kHighsOffString}) {
+    Highs h;
+    h.setOptionValue("output_flag", dev_run);
+    h.setOptionValue("presolve", presolve);
+    REQUIRE(h.readModel(model_file) != HighsStatus::kError);
+    h.run();
+    REQUIRE(h.getModelStatus() == HighsModelStatus::kOptimal);
+    REQUIRE(std::fabs(h.getInfo().objective_function_value - optimum) <= 1e-4);
+    h.resetThreadScheduler(true);
+  }
+}
+
+TEST_CASE("presolve-empty-row-sparsify", "[highs_test_presolve]") {
+  presolveToleranceCheck("empty-row-sparsify", -0.499);
+}

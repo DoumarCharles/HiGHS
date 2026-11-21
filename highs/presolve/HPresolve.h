@@ -425,6 +425,7 @@ class HPresolve {
       minAbsCoef = std::min(minAbsCoef, absCoef);
       maxAbsCoef = std::max(maxAbsCoef, absCoef);
     }
+    if (minAbsCoef == kHighsInf) return HighsCDouble(1.0);
     return static_cast<HighsCDouble>(maxAbsCoef) /
            static_cast<HighsCDouble>(minAbsCoef);
   }
