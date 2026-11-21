@@ -1510,6 +1510,8 @@ HighsLpRelaxation::Status HighsLpRelaxation::resolveLp(HighsDomain* domain) {
       case Status::kOptimal: {
         HighsHashTable<HighsInt, std::pair<double, int>> fracints(
             maxNumFractional);
+        HighsHashTable<HighsInt, std::pair<double, int>> roundints(
+            maxNumFractional);
         const HighsSolution& sol = lpsolver.getSolution();
 
         HighsCDouble objsum = 0;
@@ -1569,6 +1571,10 @@ HighsLpRelaxation::Status HighsLpRelaxation::resolveLp(HighsDomain* domain) {
 
               subst = mipsolver.mipdata_->cliquetable.getSubstitution(col);
             }
+
+            auto& roundpair = roundints[col];
+            roundpair.first += val;
+            roundpair.second += 1;
 
             if (adjustSymBranchingCol)
               col = mipsolver.mipdata_->symmetries.getBranchingColumn(
@@ -1631,7 +1637,12 @@ HighsLpRelaxation::Status HighsLpRelaxation::resolveLp(HighsDomain* domain) {
         if (roundable && !fractionalints.empty()) {
           std::vector<double> roundsol = sol.col_value;
 
-          for (const std::pair<HighsInt, double>& fracint : fractionalints) {
+          std::vector<std::pair<HighsInt, double>> roundcols;
+          for (const auto& it : roundints)
+            roundcols.emplace_back(
+                it.key(), it.value().first / (double)it.value().second);
+
+          for (const std::pair<HighsInt, double>& fracint : roundcols) {
             // get column index
             HighsInt col = fracint.first;
             // round based on locks and sign of objective coefficient
