@@ -56,8 +56,9 @@ enum class SingletonRowResult {
 
 SingletonRowResult computeSingletonRowBounds(
     double val, double rowLower, double rowUpper, double colLower,
-    double colUpper, double primalFeastol, double maxAbsColVal, bool isIntegral,
-    double& lb, double& ub, bool& lowerTightened, bool& upperTightened);
+    double colUpper, double primalFeastol, double primalFeastolDecl,
+    double maxAbsColVal, bool isIntegral, double& lb, double& ub,
+    bool& lowerTightened, bool& upperTightened);
 
 }  // namespace presolve
 #endif

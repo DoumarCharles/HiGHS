@@ -21,7 +21,7 @@ HPresolve::Result HPresolve::sparsify(HighsPostsolveStack& postsolve_stack) {
   std::vector<HighsInt> tmpEquations;
   tmpEquations.reserve(equations.size());
 
-  const double minNonzeroVal = std::sqrt(primal_feastol);
+  const double minNonzeroVal = std::sqrt(primal_feastol_decl);
 
   for (const auto& eq : equations) tmpEquations.emplace_back(eq.second);
   for (HighsInt eqrow : tmpEquations) {

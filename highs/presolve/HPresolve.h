@@ -40,10 +40,16 @@ class HPresolve {
   // pointer to model and options that where presolved
   HighsLp* model;
   const HighsOptions* options;
+  // MIP only: copy of the options with zero acceptance tolerances
+  HighsOptions mip_strict_options_;
   HighsTimer* timer;
   HighsMipSolver* mipsolver = nullptr;
   HPresolveCliqueTable presolveCliqueTable;
   double primal_feastol;
+  // tolerance for declaring infeasibility and rounding integer bounds
+  double primal_feastol_decl;
+  // dual tolerance for declaring a MIP unbounded
+  double dual_feastol_decl;
   bool may_require_basis_postsolve_;
   bool may_require_dual_postsolve_;
   std::vector<HighsBool> allow_rule_;

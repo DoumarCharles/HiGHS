@@ -577,7 +577,7 @@ HPresolve::Result HPresolve::detectParallelRowsAndCols(
         }
 
         if (newUpper < model->row_upper_[parallelRowCand]) {
-          if (newUpper < model->row_lower_[parallelRowCand] - primal_feastol)
+          if (newUpper < model->row_lower_[parallelRowCand] - primal_feastol_decl)
             return Result::kPrimalInfeasible;
 
           if (newUpper < model->row_lower_[parallelRowCand])
@@ -600,7 +600,7 @@ HPresolve::Result HPresolve::detectParallelRowsAndCols(
         }
 
         if (newLower > model->row_lower_[parallelRowCand]) {
-          if (newLower > model->row_upper_[parallelRowCand] + primal_feastol)
+          if (newLower > model->row_upper_[parallelRowCand] + primal_feastol_decl)
             return Result::kPrimalInfeasible;
 
           if (newLower > model->row_upper_[parallelRowCand])

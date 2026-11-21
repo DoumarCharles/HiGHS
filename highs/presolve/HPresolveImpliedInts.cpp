@@ -40,7 +40,7 @@ HPresolve::StatusResult HPresolve::isImpliedIntegral(HighsInt col) {
 
       if (!rowCoefficientsIntegral(nz.index(), scale)) continue;
 
-      if (fractionality(rowLower * scale) > primal_feastol)
+      if (fractionality(rowLower * scale) > primal_feastol_decl)
         return StatusResult(Result::kPrimalInfeasible);
 
       return StatusResult(true);

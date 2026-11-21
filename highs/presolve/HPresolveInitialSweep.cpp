@@ -23,11 +23,13 @@ namespace presolve {
 
 HPresolveInitialSweep::HPresolveInitialSweep(
     HighsLp& lp, const HighsOptions& options,
-    const std::vector<HighsBool>& allow_rule, const double primal_feastol)
+    const std::vector<HighsBool>& allow_rule, const double primal_feastol,
+    const double primal_feastol_decl)
     : lp_(lp),
       options_(options),
       allow_rule_(allow_rule),
       primal_feastol_(primal_feastol),
+      primal_feastol_decl_(primal_feastol_decl),
       num_deleted_rows_(0),
       num_deleted_cols_(0) {}
 
@@ -111,8 +113,8 @@ void HPresolveInitialSweep::removeFixedCol(HighsInt col) {
 
 HPresolveInitialSweep::Result HPresolveInitialSweep::emptyRow(
     HighsPostsolveStack& postsolve_stack, HighsInt row) {
-  if (lp_.row_upper_[row] < -primal_feastol_ ||
-      lp_.row_lower_[row] > primal_feastol_)
+  if (lp_.row_upper_[row] < -primal_feastol_decl_ ||
+      lp_.row_lower_[row] > primal_feastol_decl_)
     return Result::kPrimalInfeasible;
   postsolve_stack.redundantRow(row);
   return Result::kOk;
@@ -135,7 +137,8 @@ HPresolveInitialSweep::Result HPresolveInitialSweep::singletonRow(
   bool lowerTightened, upperTightened;
   SingletonRowResult sr = computeSingletonRowBounds(
       val, lp_.row_lower_[row], lp_.row_upper_[row], lp_.col_lower_[col],
-      lp_.col_upper_[col], primal_feastol_, getMaxAbsColVal(col),
+      lp_.col_upper_[col], primal_feastol_, primal_feastol_decl_,
+      getMaxAbsColVal(col),
       lp_.integrality_[col] != HighsVarType::kContinuous, lb, ub,
       lowerTightened, upperTightened);
   if (sr == SingletonRowResult::kRedundant) {

@@ -113,7 +113,7 @@ HPresolve::Result HPresolve::strengthenInequalities(
         continue;
       }
 
-      if (weight * ub <= primal_feastol) {
+      if (weight * ub <= primal_feastol_decl) {
         smallcontribution += weight * ub;
         continue;
       }
@@ -143,7 +143,13 @@ HPresolve::Result HPresolve::strengthenInequalities(
       continue;
     }
 
+    // the termination and negligible-term tests of the loop keep
+    // the user's tolerance (at zero tolerance round-off residues are never
+    // dropped and the loop does not end); cover membership stays strict
     const double smallVal =
+        std::max(100 * primal_feastol_decl,
+                 primal_feastol_decl * static_cast<double>(maxviolation));
+    const double coverTol =
         std::max(100 * primal_feastol,
                  primal_feastol * static_cast<double>(maxviolation));
     while (true) {
@@ -168,7 +174,7 @@ HPresolve::Result HPresolve::strengthenInequalities(
         HighsCDouble delta = upper[index] * reducedcost[index];
 
         if (upper[index] <= 1000.0 && reducedcost[index] > smallVal &&
-            lambda - delta <= smallVal)
+            lambda - delta <= coverTol)
           cover.push_back(index);
         else
           lambda -= delta;
@@ -185,7 +191,7 @@ HPresolve::Result HPresolve::strengthenInequalities(
 
       HighsCDouble al = reducedcost[alpos];
       coefs.resize(cover.size());
-      HighsCDouble coverrhs = max(ceil(lambda / al - primal_feastol), 1.0);
+      HighsCDouble coverrhs = max(ceil(lambda / al - primal_feastol_decl), 1.0);
       HighsCDouble slackupper = -coverrhs;
 
       HighsCDouble step = kHighsInf;
@@ -206,7 +212,7 @@ HPresolve::Result HPresolve::strengthenInequalities(
       for (size_t i = 0; i != cover.size(); ++i) {
         HighsInt index = cover[i];
         reducedcost[index] -= step * coefs[i];
-        if (reducedcost[index] * upper[index] <= primal_feastol) {
+        if (reducedcost[index] * upper[index] <= primal_feastol_decl) {
           if (reducedcost[index] > 0.0)
             smallcontribution += reducedcost[index] * upper[index];
           reducedcost[index] = 0.0;
@@ -218,7 +224,7 @@ HPresolve::Result HPresolve::strengthenInequalities(
           std::remove_if(indices.begin(), indices.end(),
                          [&](HighsInt i) { return reducedcost[i] <= 0.0; }),
           indices.end());
-      if (step * slackupper <= primal_feastol) {
+      if (step * slackupper <= primal_feastol_decl) {
         smallcontribution += step * slackupper;
       } else {
         indices.push_back(static_cast<HighsInt>(reducedcost.size()));
@@ -227,7 +233,7 @@ HPresolve::Result HPresolve::strengthenInequalities(
       }
     }
 
-    double threshold = static_cast<double>(maxviolation + primal_feastol);
+    double threshold = static_cast<double>(maxviolation + primal_feastol_decl);
 
     indices.erase(std::remove_if(indices.begin(), indices.end(),
                                  [&](HighsInt i) {
