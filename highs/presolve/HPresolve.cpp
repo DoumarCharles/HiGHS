@@ -2316,6 +2316,15 @@ HPresolve::Result HPresolve::doubletonEq(HighsPostsolveStack& postsolve_stack,
                                               staycoef);
   }
 
+  if (model->integrality_[staycol] == HighsVarType::kInteger) {
+    // round with a tolerance that keeps the substituted column within
+    // primal_feastol of its bounds
+    double tol =
+        primal_feastol * std::min(1.0, std::fabs(substcoef / staycoef));
+    stayImplLower = std::ceil(stayImplLower - tol);
+    stayImplUpper = std::floor(stayImplUpper + tol);
+  }
+
   // possibly tighten bounds of the column that stays
   bool lowerTightened = stayImplLower > oldStayLower + primal_feastol;
   if (lowerTightened)
