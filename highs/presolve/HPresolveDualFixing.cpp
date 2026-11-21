@@ -113,8 +113,13 @@ HPresolve::Result HPresolve::dualFixing(HighsPostsolveStack& postsolve_stack,
       // skip equation we are inspecting; coefficient is positive (see sign
       // adjustment performed by caller)
       if (colNz.index() == row) continue;
-      // skip redundant rows
-      if (isRedundant(colNz.index())) continue;
+      // skip redundant rows (exactly redundant: a row that is redundant only
+      // within the tolerance still restricts the column)
+      if (impliedRowBounds.getSumLower(colNz.index()) >=
+              model->row_lower_[colNz.index()] &&
+          impliedRowBounds.getSumUpper(colNz.index()) <=
+              model->row_upper_[colNz.index()])
+        continue;
       // another ranged row blocks variable in both directions -> cannot be a
       // candidate for fixing
       if (isRanged(colNz.index())) return false;
