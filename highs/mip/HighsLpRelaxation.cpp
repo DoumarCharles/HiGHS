@@ -1536,6 +1536,17 @@ HighsLpRelaxation::Status HighsLpRelaxation::resolveLp(HighsDomain* domain) {
         lpsolver.setBasis(basis);
         status = run();
         lpsolver.setOptionValue("dual_feasibility_tolerance", dualtol);
+        if (status != Status::kOptimal &&
+            status != Status::kUnscaledDualFeasible) {
+          // the tighter solve failed: return to the first solution, but its
+          // objective is not a bound and its status must not decide the MIP
+          lpsolver.setBasis(basis);
+          status = run();
+          if (status == Status::kOptimal)
+            status = Status::kUnscaledPrimalFeasible;
+          else if (status == Status::kUnscaledDualFeasible)
+            status = Status::kUnscaledInfeasible;
+        }
       }
     }
 
