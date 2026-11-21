@@ -848,8 +848,13 @@ void HighsImplications::separateImpliedBounds(
   auto tryAddCut = [&](HighsInt implCol) {
     double viol = sol[inds[0]] * vals[0] + sol[inds[1]] * vals[1] - rhs;
     if (viol > feastol) {
-      cutpool.addCut(mipsolver, inds.data(), vals.data(), 2, rhs,
-                     !mipsolver.isColContinuous(implCol), false, false, false);
+      // the cut is integral only if its coefficients and rhs are integral
+      const double eps = mipsolver.mipdata_->epsilon;
+      bool integral = !mipsolver.isColContinuous(implCol) &&
+                      fractionality(vals[1]) <= eps &&
+                      fractionality(rhs) <= eps;
+      cutpool.addCut(mipsolver, inds.data(), vals.data(), 2, rhs, integral,
+                     false, false, false);
     }
   };
 
