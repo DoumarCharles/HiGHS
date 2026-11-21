@@ -3470,10 +3470,13 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
     //                         is equal to row's lower bound
     // 2. direction = -1 (<=): forcing row if lower bound on constraint activity
     //                         is equal to row's upper bound
-    // scale tolerance using dynamism (ratio between absolute largest and
-    // smallest coefficients)
+    // a row with slack left is not forcing: fixing its columns moves points
+    // within that slack, and the moves land in the columns' other rows.
+    // A side crossed within the tolerance is accepted: scale tolerance using
+    // dynamism (ratio between absolute largest and smallest coefficients)
     if (direction * rowSide == -kHighsInf ||
         direction * impliedRowBound == kHighsInf ||
+        direction * (impliedRowBound - rowSide) > 0 ||
         abs(static_cast<HighsCDouble>(rowSide) -
             static_cast<HighsCDouble>(impliedRowBound)) >
             std::max(static_cast<double>(primal_feastol / dynamism),
