@@ -1503,6 +1503,42 @@ HighsLpRelaxation::Status HighsLpRelaxation::resolveLp(HighsDomain* domain) {
     if (domain) flushDomain(*domain);
     status = run();
 
+    if (status == Status::kOptimal || status == Status::kUnscaledDualFeasible) {
+      // A dual value of the wrong sign, even within the dual tolerance, can
+      // lower the objective by its size times the distance the column or row
+      // can still move. If that exceeds the feasibility tolerance the LP
+      // objective is not a valid bound, so resolve with a tighter tolerance
+      const HighsLp& lp = lpsolver.getLp();
+      const HighsSolution& sol = lpsolver.getSolution();
+      double drift = 0.0;
+      auto addDrift = [&](double dual, double value, double lower,
+                          double upper) {
+        // an infinite bound means the column or row can move without limit
+        if (dual < 0)
+          drift += upper < kHighsInf ? -dual * (upper - value) : kHighsInf;
+        else if (dual > 0)
+          drift += lower > -kHighsInf ? dual * (value - lower) : kHighsInf;
+      };
+      for (HighsInt i = 0; i < lp.num_col_; ++i)
+        addDrift(sol.col_dual[i], sol.col_value[i], lp.col_lower_[i],
+                 lp.col_upper_[i]);
+      for (HighsInt i = 0; i < lp.num_row_; ++i)
+        addDrift(sol.row_dual[i], sol.row_value[i], lp.row_lower_[i],
+                 lp.row_upper_[i]);
+      const double feastol = mipsolver.mipdata_->feastol;
+      if (drift > feastol) {
+        const double dualtol = lpsolver.getOptions().dual_feasibility_tolerance;
+        lpsolver.setOptionValue(
+            "dual_feasibility_tolerance",
+            std::max(dualtol * feastol / drift, kMinimumKktTolerance));
+        // setting the basis again makes the simplex check it afresh
+        HighsBasis basis = lpsolver.getBasis();
+        lpsolver.setBasis(basis);
+        status = run();
+        lpsolver.setOptionValue("dual_feasibility_tolerance", dualtol);
+      }
+    }
+
     switch (status) {
       case Status::kUnscaledInfeasible:
       case Status::kUnscaledDualFeasible:
