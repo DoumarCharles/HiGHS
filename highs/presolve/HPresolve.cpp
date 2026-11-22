@@ -3044,8 +3044,8 @@ HPresolve::Result HPresolve::rowPresolve(HighsPostsolveStack& postsolve_stack,
                   // Adjust bounds if variable is fixed to a value in between
                   // its bounds
                   double fixVal = zLower * d + b;
-                  assert(fixVal > model->col_lower_[x1] - primal_feastol);
-                  assert(fixVal < model->col_upper_[x1] + primal_feastol);
+                  assert(fixVal >= model->col_lower_[x1] - primal_feastol);
+                  assert(fixVal <= model->col_upper_[x1] + primal_feastol);
                   // change bounds
                   HPRESOLVE_CHECKED_CALL(changeColBounds(x1, fixVal, fixVal));
                   // remove column
