@@ -4117,13 +4117,34 @@ bool HEkk::logicalBasis() const {
 
 bool HEkk::proofOfPrimalInfeasibility() {
   // To be called from outside HEkk when row_ep is not known
-  assert(dual_ray_record_.index >= 0);
   HighsLp& lp = this->lp_;
   HighsInt move_out = dual_ray_record_.sign;
   HighsInt row_out = dual_ray_record_.index;
-  // Compute the basis inverse row
   HVector row_ep;
   row_ep.setup(lp.num_row_);
+  if (row_out == kMultiRowRayIndex) {
+    // The ray from primal simplex phase 1: its values are known for
+    // the unscaled LP, and its proof is checked strictly
+    const vector<double>& value = dual_ray_record_.value;
+    assert(HighsInt(value.size()) == lp.num_row_);
+    double ray_norm = 0;
+    for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+      if (!value[iRow]) continue;
+      row_ep.array[iRow] = value[iRow];
+      if (lp.is_scaled_) row_ep.array[iRow] /= lp.scale_.row[iRow];
+      row_ep.index[row_ep.count++] = iRow;
+      ray_norm = std::max(std::fabs(row_ep.array[iRow]), ray_norm);
+    }
+    if (!ray_norm) return false;
+    // As for the phase 1 ray, the proof is checked with absolute
+    // tolerances, so the ray is scaled by a power of two
+    const double ray_scale = nearestPowerOfTwoScale(ray_norm);
+    for (HighsInt iX = 0; iX < row_ep.count; iX++)
+      row_ep.array[row_ep.index[iX]] *= ray_scale;
+    return proofOfPrimalInfeasibility(row_ep, move_out, kNoRowChosen, true);
+  }
+  assert(row_out >= 0);
+  // Compute the basis inverse row
   unitBtran(row_out, row_ep);
   return proofOfPrimalInfeasibility(row_ep, move_out, row_out);
 }
@@ -4378,7 +4399,26 @@ bool HEkk::proofOfPrimalInfeasibilityFromPhase1() {
   // The small values of the ray are part of the solution of the
   // linear system with B^T, not noise, so they are not set to zero,
   // and the proof is checked strictly
-  return proofOfPrimalInfeasibility(ray, 1, kNoRowChosen, true);
+  if (!proofOfPrimalInfeasibility(ray, 1, kNoRowChosen, true)) return false;
+  // Save the ray for getDualRay. It is not from a single row, so its
+  // values are saved, for the unscaled LP, scaled by a power of two to
+  // have largest absolute value in [0.5, 1)
+  dual_ray_record_.clear();
+  dual_ray_record_.index = kMultiRowRayIndex;
+  dual_ray_record_.sign = 1;
+  vector<double>& value = dual_ray_record_.value;
+  value.assign(ray.array.begin(), ray.array.begin() + lp.num_row_);
+  if (lp.is_scaled_) {
+    double value_norm = 0;
+    for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+      value[iRow] *= lp.scale_.row[iRow];
+      value_norm = std::max(std::fabs(value[iRow]), value_norm);
+    }
+    const double value_scale = nearestPowerOfTwoScale(value_norm);
+    for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++)
+      value[iRow] *= value_scale;
+  }
+  return true;
 }
 
 double HEkk::getValueScale(const HighsInt count,

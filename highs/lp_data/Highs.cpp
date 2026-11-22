@@ -2394,7 +2394,16 @@ HighsStatus Highs::getDualRaySparse(bool& has_dual_ray,
                                     HVector& row_ep_buffer) {
   this->logHeader();
   has_dual_ray = ekk_instance_.dual_ray_record_.index != kNoRayIndex;
-  if (has_dual_ray) {
+  if (has_dual_ray && ekk_instance_.dual_ray_record_.value.size()) {
+    // The values of the dual ray are known
+    const std::vector<double>& value = ekk_instance_.dual_ray_record_.value;
+    row_ep_buffer.clear();
+    for (HighsInt iRow = 0; iRow < model_.lp_.num_row_; iRow++) {
+      if (!value[iRow]) continue;
+      row_ep_buffer.array[iRow] = value[iRow];
+      row_ep_buffer.index[row_ep_buffer.count++] = iRow;
+    }
+  } else if (has_dual_ray) {
     ekk_instance_.setNlaPointersForLpAndScale(model_.lp_);
     row_ep_buffer.clear();
     row_ep_buffer.count = 1;

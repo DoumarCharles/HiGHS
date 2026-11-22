@@ -165,6 +165,8 @@ const HighsInt kNoRowSought = -2;
 const HighsInt kNoRowChosen = -1;
 
 const HighsInt kNoRayIndex = -1;
+// A dual ray that is not from a single row: its values are known
+const HighsInt kMultiRowRayIndex = -2;
 const HighsInt kNoRaySign = 0;
 
 // Switch to use code to check that, unless the basis supplied by the

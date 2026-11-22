@@ -913,6 +913,27 @@ static double farkasMargin(const HighsLp& lp, const std::vector<double>& ray) {
   return std::max(row_min - col_max, col_min - row_max);
 }
 
+// After the primal simplex hand-over, the phase 1 dual values that prove
+// infeasibility are the dual ray. getDualRaySparse does not solve the LP,
+// so it shows that the ray is known after the solve
+static void requirePhase1DualRay(Highs& h) {
+  const HighsLp& lp = h.getLp();
+  bool has_dual_ray = false;
+  HVector row_ep;
+  row_ep.setup(lp.num_row_);
+  REQUIRE(h.getDualRaySparse(has_dual_ray, row_ep) == HighsStatus::kOk);
+  REQUIRE(has_dual_ray);
+  has_dual_ray = false;
+  std::vector<double> dual_ray(lp.num_row_);
+  REQUIRE(h.getDualRay(has_dual_ray, dual_ray.data()) == HighsStatus::kOk);
+  REQUIRE(has_dual_ray);
+  for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++)
+    REQUIRE(row_ep.array[iRow] == dual_ray[iRow]);
+  const double farkas_margin = farkasMargin(lp, dual_ray);
+  INFO("Farkas margin " << farkas_margin);
+  REQUIRE(farkas_margin > 0);
+}
+
 // Counts the log lines saying that primal simplex is used since dual
 // simplex ended with model status unknown, and those saying that the
 // primal simplex phase 1 dual values are a proof of infeasibility. The
@@ -995,6 +1016,7 @@ TEST_CASE("issue-3418-primal", "[highs_lp_solver]") {
   REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
   REQUIRE(primal_after_unknown == 1);
   REQUIRE(phase1_proof == 1);
+  requirePhase1DualRay(h);
   h.resetThreadScheduler(true);
 }
 
@@ -1013,6 +1035,7 @@ TEST_CASE("issue-3418-phase1", "[highs_lp_solver]") {
   REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
   REQUIRE(primal_after_unknown == 1);
   REQUIRE(phase1_proof == 1);
+  requirePhase1DualRay(h);
   h.resetThreadScheduler(true);
 }
 
@@ -1032,6 +1055,7 @@ TEST_CASE("issue-3418-phase1-zero", "[highs_lp_solver]") {
   REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
   REQUIRE(primal_after_unknown == 1);
   REQUIRE(phase1_proof == 1);
+  requirePhase1DualRay(h);
   h.resetThreadScheduler(true);
 }
 

@@ -2098,7 +2098,8 @@ HighsStatus Highs::getIisInterface() {
                                          original_callback_active);
     }
   }
-  const bool has_dual_ray = ekk_instance_.dual_ray_record_.index != kNoRayIndex;
+  // Only a dual ray from a single row is used
+  const bool has_dual_ray = ekk_instance_.dual_ray_record_.index >= 0;
   if (ray_option && !has_dual_ray)
     highsLogUser(options_.log_options, HighsLogType::kWarning,
                  "No known dual ray from which to compute IIS\n");
