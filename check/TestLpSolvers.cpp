@@ -914,18 +914,22 @@ static double farkasMargin(const HighsLp& lp, const std::vector<double>& ray) {
 }
 
 // Counts the log lines saying that primal simplex is used since dual
-// simplex ended with model status unknown. The logging callback is only
-// called when output_flag is true
-static void countPrimalAfterUnknown(Highs& h, HighsInt& count) {
+// simplex ended with model status unknown, and those saying that the
+// primal simplex phase 1 dual values are a proof of infeasibility. The
+// logging callback is only called when output_flag is true
+static void countPrimalAfterUnknown(Highs& h, HighsInt& count,
+                                    HighsInt& proof_count) {
   h.setOptionValue("output_flag", true);
   h.setOptionValue("log_to_console", dev_run);
-  h.setCallback([&count](int callback_type, const std::string& message,
-                         const HighsCallbackOutput*, HighsCallbackInput*,
-                         void*) {
-    if (callback_type == kCallbackLogging &&
-        message.find("model status unknown: using primal simplex") !=
-            std::string::npos)
+  h.setCallback([&count, &proof_count](
+                    int callback_type, const std::string& message,
+                    const HighsCallbackOutput*, HighsCallbackInput*, void*) {
+    if (callback_type != kCallbackLogging) return;
+    if (message.find("model status unknown: using primal simplex") !=
+        std::string::npos)
       count++;
+    if (message.find("phase 1 dual values are a proof") != std::string::npos)
+      proof_count++;
   });
   h.startCallback(kCallbackLogging);
 }
@@ -952,7 +956,8 @@ TEST_CASE("issue-3418", "[highs_lp_solver]") {
                          -1,      1,        -0.8, -1,       1,   -1, -0.9};
   Highs h;
   HighsInt primal_after_unknown = 0;
-  countPrimalAfterUnknown(h, primal_after_unknown);
+  HighsInt phase1_proof = 0;
+  countPrimalAfterUnknown(h, primal_after_unknown, phase1_proof);
   h.setOptionValue("presolve", kHighsOffString);
   REQUIRE(h.passModel(lp) == HighsStatus::kOk);
   REQUIRE(h.run() == HighsStatus::kOk);
@@ -972,16 +977,56 @@ TEST_CASE("issue-3418", "[highs_lp_solver]") {
 TEST_CASE("issue-3418-primal", "[highs_lp_solver]") {
   // Infeasible, since row r1344 is -0.03 c1544 = 3e5 with c1544 >= 0. In
   // dual simplex the proof of infeasibility from every primal infeasible
-  // row fails on a fresh factorization, so primal simplex is used
+  // row fails on a fresh factorization, so primal simplex is used. Its
+  // phase 1 dual values must prove infeasibility
   const std::string filename =
       std::string(HIGHS_DIR) + "/check/instances/issue-3418.mps";
   Highs h;
   HighsInt primal_after_unknown = 0;
-  countPrimalAfterUnknown(h, primal_after_unknown);
+  HighsInt phase1_proof = 0;
+  countPrimalAfterUnknown(h, primal_after_unknown, phase1_proof);
   h.setOptionValue("presolve", kHighsOffString);
   REQUIRE(h.readModel(filename) == HighsStatus::kOk);
   REQUIRE(h.run() == HighsStatus::kOk);
   REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
   REQUIRE(primal_after_unknown == 1);
+  REQUIRE(phase1_proof == 1);
+  h.resetThreadScheduler(true);
+}
+
+TEST_CASE("issue-3418-phase1", "[highs_lp_solver]") {
+  // Infeasible. Dual simplex hands over to primal simplex. Its phase 1
+  // dual values prove infeasibility when they are scaled and their
+  // small values are not set to zero
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/issue-3418-phase1.mps";
+  Highs h;
+  HighsInt primal_after_unknown = 0;
+  HighsInt phase1_proof = 0;
+  countPrimalAfterUnknown(h, primal_after_unknown, phase1_proof);
+  h.setOptionValue("presolve", kHighsOffString);
+  REQUIRE(h.readModel(filename) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
+  REQUIRE(primal_after_unknown == 1);
+  REQUIRE(phase1_proof == 1);
+  h.resetThreadScheduler(true);
+}
+
+TEST_CASE("issue-3418-phase1-small", "[highs_lp_solver]") {
+  // Infeasible. As issue-3418-phase1, but the phase 1 dual values
+  // include small values that are needed for the proof
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/issue-3418-phase1-small.mps";
+  Highs h;
+  HighsInt primal_after_unknown = 0;
+  HighsInt phase1_proof = 0;
+  countPrimalAfterUnknown(h, primal_after_unknown, phase1_proof);
+  h.setOptionValue("presolve", kHighsOffString);
+  REQUIRE(h.readModel(filename) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
+  REQUIRE(primal_after_unknown == 1);
+  REQUIRE(phase1_proof == 1);
   h.resetThreadScheduler(true);
 }

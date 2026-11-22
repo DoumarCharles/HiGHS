@@ -114,7 +114,9 @@ class HEkk {
 
   bool proofOfPrimalInfeasibility();
   bool proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
-                                  const HighsInt row_out);
+                                  const HighsInt row_out,
+                                  const bool zero_small_values = true);
+  bool proofOfPrimalInfeasibilityFromPhase1();
 
   double getValueScale(const HighsInt count, const vector<double>& value) const;
   double getMaxAbsRowValue(HighsInt row);

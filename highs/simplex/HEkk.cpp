@@ -1138,6 +1138,16 @@ HighsStatus HEkk::solve(const bool force_phase2) {
       return_status =
           interpretCallStatus(options_->log_options, call_status,
                               HighsStatus::kOk, "HEkkPrimal::solve");
+      // Primal infeasibility is only claimed if the primal simplex
+      // phase 1 dual values give a proof of primal infeasibility
+      if (model_status_ == HighsModelStatus::kInfeasible) {
+        const bool phase1_proof = proofOfPrimalInfeasibilityFromPhase1();
+        highsLogUser(options_->log_options, HighsLogType::kInfo,
+                     "Primal simplex phase 1 dual values %s a proof of "
+                     "primal infeasibility\n",
+                     phase1_proof ? "are" : "are not");
+        if (!phase1_proof) model_status_ = HighsModelStatus::kUnknown;
+      }
     }
   }
 
@@ -4119,7 +4129,8 @@ bool HEkk::proofOfPrimalInfeasibility() {
 }
 
 bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
-                                      const HighsInt row_out) {
+                                      const HighsInt row_out,
+                                      const bool zero_small_values) {
   // To be called from inside HEkkDual
   HighsLp& lp = this->lp_;
 
@@ -4162,8 +4173,9 @@ bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
     // getDualRayInterface.
     const double row_ep_value = row_ep.array[iRow];
     assert(row_ep_value);
-    if (std::abs(row_ep_value * getMaxAbsRowValue(iRow)) <=
-        options_->small_matrix_value) {
+    if (zero_small_values &&
+        std::abs(row_ep_value * getMaxAbsRowValue(iRow)) <=
+            options_->small_matrix_value) {
       if (debug_proof_report) {
         const double abs_row_ep_value = std::abs(row_ep_value);
         if (num_zeroed_for_small_report < max_num_zeroed_report &&
@@ -4311,6 +4323,47 @@ bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
            proof_of_primal_infeasibility ? "true" : "false");
   }
   return proof_of_primal_infeasibility;
+}
+
+bool HEkk::proofOfPrimalInfeasibilityFromPhase1() {
+  // To be called when primal simplex phase 1 is optimal with primal
+  // infeasibilities. The ray is the gradient of the sum of primal
+  // infeasibilities after BTRAN: the sum over the infeasible rows of
+  // the single-row rays used by dual simplex, with the same signs
+  HighsLp& lp = this->lp_;
+  const double tolerance = options_->primal_feasibility_tolerance;
+  HVector ray;
+  ray.setup(lp.num_row_);
+  for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+    const double value = info_.baseValue_[iRow];
+    double move = 0;
+    if (value < info_.baseLower_[iRow] - tolerance) {
+      move = -1;
+    } else if (value > info_.baseUpper_[iRow] + tolerance) {
+      move = 1;
+    }
+    if (!move) continue;
+    ray.array[iRow] = move;
+    ray.index[ray.count++] = iRow;
+  }
+  if (!ray.count) return false;
+  fullBtran(ray);
+  // The proof is checked with absolute tolerances, so the ray is
+  // scaled by a power of two to have largest absolute value in [0.5,
+  // 1). The indices are not known after BTRAN
+  double ray_norm = 0;
+  for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++)
+    ray_norm = std::max(std::fabs(ray.array[iRow]), ray_norm);
+  if (!ray_norm) return false;
+  const double ray_scale = nearestPowerOfTwoScale(ray_norm);
+  ray.count = 0;
+  for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
+    ray.array[iRow] *= ray_scale;
+    if (ray.array[iRow]) ray.index[ray.count++] = iRow;
+  }
+  // The small values of the ray are part of the solution of the
+  // linear system with B^T, not noise, so they are not set to zero
+  return proofOfPrimalInfeasibility(ray, 1, kNoRowChosen, false);
 }
 
 double HEkk::getValueScale(const HighsInt count,
