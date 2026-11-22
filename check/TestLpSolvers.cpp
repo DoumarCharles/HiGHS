@@ -1059,6 +1059,26 @@ TEST_CASE("issue-3418-phase1-zero", "[highs_lp_solver]") {
   h.resetThreadScheduler(true);
 }
 
+TEST_CASE("issue-3418-phase1-scaled", "[highs_lp_solver]") {
+  // Infeasible. Dual simplex on the scaled LP hands over to primal
+  // simplex. Its phase 1 dual values, converted to the unscaled LP,
+  // prove infeasibility of the unscaled LP, so it is not solved again
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/issue-3418-phase1-scaled.mps";
+  Highs h;
+  HighsInt primal_after_unknown = 0;
+  HighsInt phase1_proof = 0;
+  countPrimalAfterUnknown(h, primal_after_unknown, phase1_proof);
+  h.setOptionValue("presolve", kHighsOffString);
+  REQUIRE(h.readModel(filename) == HighsStatus::kOk);
+  REQUIRE(h.run() == HighsStatus::kOk);
+  REQUIRE(h.getModelStatus() == HighsModelStatus::kInfeasible);
+  REQUIRE(primal_after_unknown == 1);
+  REQUIRE(phase1_proof == 1);
+  requirePhase1DualRay(h);
+  h.resetThreadScheduler(true);
+}
+
 TEST_CASE("issue-3418-notset", "[highs_lp_solver]") {
   // Dual simplex on the scaled LP ends with a rank deficiency that
   // cannot be backtracked, so it returns an error. The model status
