@@ -281,6 +281,12 @@ inline HighsStatus solveLpSimplex(HighsLpSolverObject& solver_object) {
         return_status = HighsStatus::kError;
       }
       if (return_status == HighsStatus::kError) {
+        // Error return, so make sure that the model status is
+        // copied from the EKK instance, otherwise it is left as
+        // HighsModelStatus::kNotset
+        model_status = ekk_instance.model_status_;
+        assert(highsStatusFromHighsModelStatus(model_status) ==
+               HighsStatus::kError);
         incumbent_lp.moveBackLpAndUnapplyScaling(ekk_lp);
         return returnFromSolveLpSimplex(solver_object, return_status);
       }

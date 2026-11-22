@@ -1059,6 +1059,24 @@ TEST_CASE("issue-3418-phase1-zero", "[highs_lp_solver]") {
   h.resetThreadScheduler(true);
 }
 
+TEST_CASE("issue-3418-notset", "[highs_lp_solver]") {
+  // Dual simplex on the scaled LP ends with a rank deficiency that
+  // cannot be backtracked, so it returns an error. The model status
+  // must say so, rather than being left as HighsModelStatus::kNotset
+  const std::string filename =
+      std::string(HIGHS_DIR) + "/check/instances/issue-3418-notset.mps";
+  Highs h;
+  h.setOptionValue("output_flag", dev_run);
+  h.setOptionValue("presolve", kHighsOffString);
+  h.setOptionValue("random_seed", 1);
+  REQUIRE(h.readModel(filename) == HighsStatus::kOk);
+  const HighsStatus run_status = h.run();
+  REQUIRE(h.getModelStatus() != HighsModelStatus::kNotset);
+  if (run_status == HighsStatus::kError)
+    REQUIRE(h.getModelStatus() == HighsModelStatus::kSolveError);
+  h.resetThreadScheduler(true);
+}
+
 TEST_CASE("issue-3418-phase1-small", "[highs_lp_solver]") {
   // Infeasible. Dual simplex hands over to primal simplex. Its phase 1
   // ends at a basis that is optimal only within the dual feasibility
