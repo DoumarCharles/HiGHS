@@ -4130,7 +4130,7 @@ bool HEkk::proofOfPrimalInfeasibility() {
 
 bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
                                       const HighsInt row_out,
-                                      const bool zero_small_values) {
+                                      const bool strict) {
   // To be called from inside HEkkDual
   HighsLp& lp = this->lp_;
 
@@ -4173,9 +4173,8 @@ bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
     // getDualRayInterface.
     const double row_ep_value = row_ep.array[iRow];
     assert(row_ep_value);
-    if (zero_small_values &&
-        std::abs(row_ep_value * getMaxAbsRowValue(iRow)) <=
-            options_->small_matrix_value) {
+    if (!strict && std::abs(row_ep_value * getMaxAbsRowValue(iRow)) <=
+                       options_->small_matrix_value) {
       if (debug_proof_report) {
         const double abs_row_ep_value = std::abs(row_ep_value);
         if (num_zeroed_for_small_report < max_num_zeroed_report &&
@@ -4244,7 +4243,17 @@ bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
   proof_index_.clear();
   vector<double>& proof_value = this->proof_value_;
   vector<HighsInt>& proof_index = this->proof_index_;
-  if (use_row_wise_matrix) {
+  if (strict) {
+    // Values below kHighsTiny are kept, since they may multiply large
+    // finite bounds
+    vector<double> dense_proof_value;
+    lp.a_matrix_.productTransposeQuad(dense_proof_value, row_ep.array);
+    for (HighsInt iCol = 0; iCol < lp.num_col_; iCol++) {
+      if (!dense_proof_value[iCol]) continue;
+      proof_value.push_back(dense_proof_value[iCol]);
+      proof_index.push_back(iCol);
+    }
+  } else if (use_row_wise_matrix) {
     this->ar_matrix_.productTransposeQuad(proof_value, proof_index, row_ep,
                                           debug_product_report);
   } else {
@@ -4278,6 +4287,9 @@ bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
       }
     }
   }
+  // When strict, no value above kHighsTiny may multiply an infinite
+  // bound
+  const double sum_inf_tolerance = strict ? 0 : options_->small_matrix_value;
   HighsCDouble implied_upper = 0.0;
   HighsCDouble sumInf = 0.0;
   for (HighsInt i = 0; i < proof_num_nz; ++i) {
@@ -4285,8 +4297,9 @@ bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
     const double value = proof_value[i];
     if (value > 0) {
       if (highs_isInfinity(lp.col_upper_[iCol])) {
+        if (strict && value <= kHighsTiny) continue;
         sumInf += value;
-        if (sumInf > options_->small_matrix_value) break;
+        if (sumInf > sum_inf_tolerance) break;
         continue;
         // Commented out unreachable code
         //        if (value <= options_->small_matrix_value) continue;
@@ -4294,14 +4307,15 @@ bool HEkk::proofOfPrimalInfeasibility(HVector& row_ep, const HighsInt move_out,
       implied_upper += value * lp.col_upper_[iCol];
     } else {
       if (highs_isInfinity(-lp.col_lower_[iCol])) {
+        if (strict && -value <= kHighsTiny) continue;
         sumInf += -value;
-        if (sumInf > options_->small_matrix_value) break;
+        if (sumInf > sum_inf_tolerance) break;
         continue;
       }
       implied_upper += value * lp.col_lower_[iCol];
     }
   }
-  bool infinite_implied_upper = sumInf > options_->small_matrix_value;
+  bool infinite_implied_upper = sumInf > sum_inf_tolerance;
   const double gap = double(proof_lower - implied_upper);
   const bool gap_ok = gap > options_->primal_feasibility_tolerance;
   const bool proof_of_primal_infeasibility = !infinite_implied_upper && gap_ok;
@@ -4362,8 +4376,9 @@ bool HEkk::proofOfPrimalInfeasibilityFromPhase1() {
     if (ray.array[iRow]) ray.index[ray.count++] = iRow;
   }
   // The small values of the ray are part of the solution of the
-  // linear system with B^T, not noise, so they are not set to zero
-  return proofOfPrimalInfeasibility(ray, 1, kNoRowChosen, false);
+  // linear system with B^T, not noise, so they are not set to zero,
+  // and the proof is checked strictly
+  return proofOfPrimalInfeasibility(ray, 1, kNoRowChosen, true);
 }
 
 double HEkk::getValueScale(const HighsInt count,
