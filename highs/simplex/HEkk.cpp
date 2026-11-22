@@ -4124,14 +4124,15 @@ bool HEkk::proofOfPrimalInfeasibility() {
   row_ep.setup(lp.num_row_);
   if (row_out == kMultiRowRayIndex) {
     // The ray from primal simplex phase 1: its values are known for
-    // the unscaled LP, and its proof is checked strictly
+    // the unscaled LP, which is the LP here, and its proof is checked
+    // strictly
     const vector<double>& value = dual_ray_record_.value;
     assert(HighsInt(value.size()) == lp.num_row_);
+    assert(!lp.is_scaled_);
     double ray_norm = 0;
     for (HighsInt iRow = 0; iRow < lp.num_row_; iRow++) {
       if (!value[iRow]) continue;
       row_ep.array[iRow] = value[iRow];
-      if (lp.is_scaled_) row_ep.array[iRow] /= lp.scale_.row[iRow];
       row_ep.index[row_ep.count++] = iRow;
       ray_norm = std::max(std::fabs(row_ep.array[iRow]), ray_norm);
     }
